@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-08-19 18:13:31.436702",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-19 18:13:31.436702",
+ "modified_by": "Administrator",
+ "module": "Reflection Telegram",
+ "name": "telegram-qr",
+ "owner": "Administrator",
+ "page_name": "telegram-qr",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Telegram QR Codes"
+}

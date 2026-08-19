@@ -1,70 +1,108 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2019, Youssef Restom and contributors
+# Copyright (c) 2026, Amr Basha and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
 import frappe
-import asyncio
-import telegram
-import binascii
-import os
-from frappe.model.document import Document
 from frappe import _
+from frappe.model.document import Document
+
+from reflection_telegram import onboarding, telegram_client, webhook
 
 
 class TelegramUserSettings(Document):
-	
+	def before_insert(self):
+		# The QR image is attached in after_insert -- it needs self.name to exist.
+		onboarding.assign_link(self)
 
-	def validate(self):
-		pass
+	def after_insert(self):
+		onboarding.attach_qr(self)
+		self.db_set("qr_code", self.qr_code, update_modified=False)
 
+	def on_update(self):
+		"""`is_group_chat` decides between ?start= and ?startgroup=, so a change
+		there invalidates the stored link and the QR printed from it."""
+		if not self.has_value_changed("is_group_chat"):
+			return
 
-	def get_token_settings(self):
-		return frappe.db.get_value('Telegram Settings', self.telegram_settings,'telegram_token')
+		onboarding.assign_link(self)
+		onboarding.attach_qr(self)
+		self.db_set(
+			{"deep_link": self.deep_link, "qr_code": self.qr_code}, update_modified=False
+		)
 
+	@frappe.whitelist()
+	def regenerate_qr(self):
+		"""Issue a fresh payload and QR, dropping any existing chat link.
 
-	def get_chat_id(self):
-		telegram_token = self.get_token_settings()
-		bot = telegram.Bot(token = telegram_token)
-		updates = bot.get_updates(limit=100)
-		for u in updates:
-			message = u.message.text
-			chat_id = u.message.chat_id
-			if self.telegram_token == message:
-				self.telegram_chat_id = chat_id
-				break
-			else:
-				self.telegram_chat_id = None
+		Deliberately destructive: this is the "someone else has my QR code" button,
+		so the old payload must stop working.
+		"""
+		onboarding.refresh(self, force=True)
+		self.db_set(
+			{
+				"telegram_token": self.telegram_token,
+				"deep_link": self.deep_link,
+				"qr_code": self.qr_code,
+				"telegram_chat_id": None,
+				"linked_on": None,
+				"linked_chat_title": None,
+			},
+			update_modified=False,
+		)
+		return {"deep_link": self.deep_link, "qr_code": self.qr_code}
 
+	@frappe.whitelist()
+	def check_link(self):
+		"""Ask Telegram directly whether this QR has been scanned yet.
 
+		The webhook normally records the link on its own; this is the manual pull
+		for sites polling instead, or for checking without waiting for the tick.
+		"""
+		if self.telegram_chat_id:
+			return {"linked": True, "chat_id": self.telegram_chat_id}
+
+		token = telegram_client.get_token(self.telegram_settings)
+		info = telegram_client.call_api(token, "get_webhook_info")
+
+		if info.url:
+			frappe.msgprint(
+				_(
+					"A webhook is registered for this bot, so linking happens automatically "
+					"the moment the QR is scanned. Nothing to pull."
+				)
+			)
+			return {"linked": False, "chat_id": None}
+
+		for update in telegram_client.call_api(token, "get_updates", limit=100, timeout=0):
+			if webhook.handle_update(update.to_dict(), self.telegram_settings):
+				self.reload()
+				if self.telegram_chat_id:
+					return {"linked": True, "chat_id": self.telegram_chat_id}
+
+		frappe.msgprint(
+			_(
+				"No scan found yet. Ask the recipient to scan the QR code and press START, "
+				"then try again. Telegram discards unread updates after 24 hours."
+			)
+		)
+		return {"linked": False, "chat_id": None}
 
 
 @frappe.whitelist()
-def generate_telegram_token(is_group_chat):
-	if int(is_group_chat) == 1:
-		return "/"+ binascii.hexlify(os.urandom(19)).decode()
-	else:
-		return binascii.hexlify(os.urandom(20)).decode()
+def generate_telegram_token(is_group_chat=None):
+	"""Kept for callers of the old API. Payloads no longer carry a "/" prefix:
+	a deep link arrives as `/start <payload>`, which is already a command."""
+	return onboarding.build_payload()
+
 
 @frappe.whitelist()
 def get_chat_id_button(telegram_token, telegram_settings):
-	telegram_token_bot = frappe.db.get_value('Telegram Settings', telegram_settings,'telegram_token')
-	chat_id = asyncio.run(get_chat_id(telegram_token_bot, telegram_token))
-	if chat_id:
-		return str(chat_id)
-	else:
-		frappe.msgprint(_("No chat id found for this token, please check the token and make sure you are pasting it in the right chat boot or group in Telegram"))
-	
-async def get_chat_id(telegram_token_bot, telegram_token):
-	bot = telegram.Bot(token = telegram_token_bot)
-	async with bot:
-		updates = await bot.get_updates(limit=100)
-		for u in updates:
-			# ignore messages without text
-			if not u.message or not u.message.text :
-				continue
-			message = u.message.text
-			chat_id = u.message.chat_id
-			if telegram_token == message:
-				print("chat_id >>>>>> "+ str(chat_id))
-				return chat_id
+	"""Backwards-compatible entry point for the old "Get Chat ID" button."""
+	doc = onboarding.find_by_payload(telegram_token, telegram_settings)
+	if not doc:
+		frappe.msgprint(_("No Telegram User Settings record matches that token."))
+		return None
+
+	result = doc.check_link()
+	return result.get("chat_id")

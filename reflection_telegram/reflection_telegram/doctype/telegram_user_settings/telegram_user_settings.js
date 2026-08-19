@@ -1,64 +1,107 @@
 // Copyright (c) 2019, Youssef Restom and contributors
+// Copyright (c) 2026, Amr Basha and contributors
 // For license information, please see license.txt
 
 frappe.ui.form.on('Telegram User Settings', {
-	// refresh: function(frm) {
-	// set_field_options("party", ["User","Employee","Customer", "Supplier", "Contact"]);
-	// },
-
 	setup: function (frm) {
-		frm.set_query("party", function () {
-			var doctypes = ["User", "Employee", "Customer", "Supplier", "Contact"];
-			return {
-				filters: { "name": ["in", doctypes] }
-			};
+		frm.set_query('party', function () {
+			return { filters: { name: ['in', ['User', 'Employee', 'Customer', 'Supplier', 'Contact']] } };
 		});
 	},
 
+	refresh: function (frm) {
+		if (frm.is_new()) return;
 
-	generate_telegram_token: function (frm) {
-		frappe.call({
-			method: 'reflection_telegram.reflection_telegram.doctype.telegram_user_settings.telegram_user_settings.generate_telegram_token',
-			args: { "is_group_chat": frm.doc.is_group_chat },
-			callback: (r) => {
-				// console.log(r.message[0]);
-				var telegram_token = r.message;
+		frm.dashboard.clear_headline();
+		if (frm.doc.telegram_chat_id) {
+			frm.dashboard.set_headline(
+				__('Linked to chat {0}{1}', [
+					frm.doc.telegram_chat_id,
+					frm.doc.linked_chat_title ? ` (${frm.doc.linked_chat_title})` : '',
+				]),
+				'green'
+			);
+		} else {
+			frm.dashboard.set_headline(
+				__('Not linked yet. Show the QR code below and ask the recipient to scan it and press START.'),
+				'orange'
+			);
+		}
 
-				frm.set_value("telegram_token", telegram_token);
-				frappe.model.get_value('Telegram Settings', { name: frm.doc.telegram_settings }, 'bot_name', (r) => {
-					if (r.bot_name) {
-						navigator.clipboard.writeText(frm.doc.telegram_token).then(() => {
-							frappe.show_alert({ message: __('Telegram Token copied to your clipboard!'), indicator: 'green' }, 20);
-							window.open(`https://t.me/${r.bot_name}`, '_blank');
+		frm.add_custom_button(__('Show QR Full Screen'), () => show_qr_dialog(frm));
+
+		if (!frm.doc.telegram_chat_id) {
+			frm.add_custom_button(__('Check Link'), () => {
+				frm.call({ doc: frm.doc, method: 'check_link', freeze: true }).then((r) => {
+					if (r.message && r.message.linked) {
+						frappe.show_alert({ message: __('Linked!'), indicator: 'green' });
+						frm.reload_doc();
+					}
+				});
+			});
+		}
+
+		frm.add_custom_button(
+			__('Regenerate QR'),
+			() => {
+				frappe.confirm(
+					__('This issues a new QR code and unlinks the current chat. Continue?'),
+					() => {
+						frm.call({ doc: frm.doc, method: 'regenerate_qr', freeze: true }).then(() => {
+							frm.reload_doc();
 						});
 					}
+				);
+			},
+			__('Actions')
+		);
 
-				});
-
-			}
-		});
+		if (frm.doc.telegram_chat_id) {
+			frm.add_custom_button(
+				__('Send Test Message'),
+				() => send_test(frm),
+				__('Actions')
+			);
+		}
 	},
-
-	get_chat_id: function (frm) {
-		if (frm.is_dirty() || frm.is_new()) {
-			frappe.throw(__("Please save the document first!"));
-			return;
-		}
-		if (!frm.doc.telegram_token) {
-			frappe.throw(__("Please generate a Telegram Token first!"));
-			return;
-		}
-		if (!frm.doc.telegram_settings) {
-			frappe.throw(__("Please select a Telegram Settings first!"));
-			return;
-		}
-		frappe.call({
-			method: 'reflection_telegram.reflection_telegram.doctype.telegram_user_settings.telegram_user_settings.get_chat_id_button',
-			args: { "telegram_token": frm.doc.telegram_token, "telegram_settings": frm.doc.telegram_settings },
-			callback: (r) => {
-				frm.set_value("telegram_chat_id", r.message);
-				refresh_field("telegram_chat_id");
-			}
-		});
-	}
 });
+
+function show_qr_dialog(frm) {
+	if (!frm.doc.qr_code) {
+		frappe.msgprint(__('No QR code has been generated for this record yet.'));
+		return;
+	}
+
+	const d = new frappe.ui.Dialog({
+		title: __('Scan to link {0}', [frm.doc.telegram_user]),
+		size: 'small',
+		primary_action_label: __('Print'),
+		primary_action: () => window.open(frm.doc.qr_code, '_blank'),
+	});
+
+	d.$body.html(`
+		<div style="text-align:center; padding: 15px;">
+			<img src="${frappe.utils.escape_html(frm.doc.qr_code)}"
+			     style="width:100%; max-width:320px; image-rendering: pixelated;">
+			<p style="margin-top:15px; font-size: 12px; color: var(--text-muted); word-break: break-all;">
+				${frappe.utils.escape_html(frm.doc.deep_link || '')}
+			</p>
+		</div>
+	`);
+	d.show();
+}
+
+function send_test(frm) {
+	frappe.prompt(
+		{ fieldname: 'message', fieldtype: 'Small Text', label: __('Message'), reqd: 1, default: __('Test message') },
+		(values) => {
+			frappe.call({
+				method: 'reflection_telegram.api.send_message',
+				args: { telegram_user: frm.doc.name, message: values.message },
+				freeze: true,
+			}).then(() => frappe.show_alert({ message: __('Sent'), indicator: 'green' }));
+		},
+		__('Send Test Message'),
+		__('Send')
+	);
+}

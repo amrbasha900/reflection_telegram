@@ -1,119 +1,138 @@
-# Reflection Telegram And Notifications
+# Reflection Telegram
 
-Telegram Integration and Extra Notifications For Frappe & Erpnext to sending fast notifications for more productivity.
+Telegram integration for Frappe / ERPNext.
 
+Forked from [yrestom/erpnext_telegram](https://github.com/yrestom/erpnext_telegram) and
+extended with QR onboarding, a rate-limited sending queue, and an API other apps can call.
 
+## What it adds over the original
 
-# Main features
+| | Original | This app |
+|---|---|---|
+| Linking a recipient | Copy a token, paste it into the bot chat by hand, click **Get Chat ID** within 24 h | Scan a QR, press **START** — done |
+| Capturing the chat id | Manual button, `getUpdates` polling | Webhook (instant), with optional 5-minute polling as a fallback |
+| Sending in bulk | One at a time, inline | Queued and paced, so Telegram does not restrict the bot |
+| Calling from another app | Import a doctype module | `reflection_telegram.api` |
 
-### Telegram Notifications:
+## Setup
 
-- Sending custom notification by Telegram Bots to Users, Employees, Customers, Suppliers or Students, and Telegram group chat.
-- Sending Telegram direct messages from any form view.
-- Multiple Telegram Bots channels.
+1. **Create the bot.** Talk to [@BotFather](https://t.me/BotFather), `/newbot`, and copy the
+   token. It looks like `1234567890:AAG...` — the digits before the colon are part of it.
+2. **Telegram Settings.** Create a record with the full token and the bot's username
+   (without the `@`).
+3. **Register the webhook.** Open the record → **Webhook** → **Register Webhook**. Use
+   **Check Bot** to confirm Telegram accepted it.
 
-### SMS Notifications:
+   The site must be reachable over HTTPS from the internet. If it is not, leave the webhook
+   off and tick **Poll Telegram Every 5 Minutes** instead.
+4. **Set the sending rate** if 20 messages/minute is not right for you.
 
-- Sending custom notification by SMS to Users, Employees, Customers, Suppliers or Students .
+## Linking recipients
 
-### Date Notifications:
+Open **Telegram QR Codes** (or the workspace shortcut):
 
-- Get alerts on important dates
+1. Pick the Telegram Settings and the party type (Supplier, Customer, Employee, Contact, User).
+2. Select the records you want and press **Generate QR**.
+3. **Print Selected** produces a sheet of QR cards to hand out. **Print One Per Page** gives
+   one card per sheet.
+4. The recipient scans the card, presses **START**, and the chat id is stored automatically.
+   The card turns green on the page.
 
+Tick **Group Chat** before generating to produce links that add the bot to a group instead of
+opening a private chat.
 
+### How the QR works
 
-# How to Install
+The QR encodes a Telegram [deep link](https://core.telegram.org/bots/features#deep-linking):
 
-1. `./env/bin/pip install python-telegram-bot --upgrade` "*This command is necessary to install the python-telegram-bot into bench environment. Otherwise, the pip3/pip command will install it in the python environment"*
+```
+https://t.me/<bot>?start=<payload>            private chat
+https://t.me/<bot>?startgroup=<payload>       group chat
+```
 
-2. `bench get-app reflection_telegram https://github.com/yrestom/erpnext_telegram.git`
+Opening it shows a START button. Pressing it makes Telegram send `/start <payload>` to the
+bot, the webhook matches the payload back to the Telegram User Settings record, and stores
+`telegram_chat_id`. Nothing has to be typed or copied.
 
-3. `bench --site [your.site.name] install-app reflection_telegram`
+The payload is 32 hex characters, well inside Telegram's 64-character limit. Records created
+before this app existed still link: the matcher also accepts a bare paste and the old
+`/<token>` group form.
 
-4. `bench build`
+## Sending
 
-5. `bench restart`
+See [docs/API.md](docs/API.md) for the full reference. The short version:
 
-6. Create a new Telegram bot in `BotFather`
+```python
+from reflection_telegram import api
 
-   For more reference :
+# one message, right now
+api.send_message(telegram_user="2012381-Send Agri Statement", message="Your statement is ready")
 
-   - [Bots: An introduction for developers](https://core.telegram.org/bots)
-   - [Learn to build your first bot in Telegram with Python](https://www.freecodecamp.org/news/learn-to-build-your-first-bot-in-telegram-with-python-4c99526765e4/)
+# by business record instead of linking record
+api.send_to_party(party_type="Supplier", party="2012381", message="Your statement is ready")
 
-7. Get Telegram Bot Token from `BotFather`
+# with a PDF of a document
+api.send_message(
+    telegram_user="2012381-Send Agri Statement",
+    message="Statement attached",
+    reference_doctype="Sales Invoice",
+    reference_name="ACC-SINV-2026-00001",
+    attach_print=1,
+)
 
+# 250 messages, each to its own recipient, paced automatically
+api.send_bulk(messages=[
+    {"telegram_user": "2012381-Send Agri Statement", "message": "..."},
+    {"telegram_user": "2012382-Send Agri Statement", "message": "..."},
+    # ...
+], title="August statements")
+```
 
+### Why bulk sends are queued
 
-# Setup and Use:
+Telegram rate-limits, and eventually restricts, a bot that fires hundreds of messages at
+once. `send_bulk` never sends inline. It writes **Telegram Outbox** rows stamped with a
+`scheduled_at` spread across time, and a once-a-minute scheduler job drains whatever has come
+due, pausing between each send.
 
-## Telegram Notifications:
+At the default 20 messages/minute, 250 messages go out over about 12 minutes. Track progress
+on the **Telegram Broadcast** record — it counts sent and failed, and **Cancel Pending** stops
+anything that has not left yet.
 
-In Reflection Telegram
+Messages that fail for a transient reason go back in the queue. When Telegram answers `429` it
+also says how long to wait, and the queue honours that exactly, which is what keeps a rate
+limit from escalating into a restriction. Permanent failures — the bot was blocked, the chat
+is gone, the token is wrong — are marked Failed immediately rather than retried.
 
-1. Go to → Telegram Settings -> New Enter Telegram Bot Token
+## Doctypes
 
-2. Go to → Telegram User Settings -> New to setup and define a new user setting
+| DocType | Purpose |
+|---|---|
+| Telegram Settings | One bot: token, webhook, polling toggle, sending rate |
+| Telegram User Settings | One recipient: party, payload, deep link, QR, chat id |
+| Telegram Outbox | The sending queue, one row per message |
+| Telegram Broadcast | Groups a bulk send and tracks its progress |
+| Telegram Notification | Event-driven alerts (from the original app) |
+| SMS Notification, Date Notification | Unrelated extras carried over from the original app |
 
-   1. Choose party.
-   2. Choose Telegram User.
-   3. Choose Telegram Settings.
-   4. If it's a group check "Is Group Chat".
-   5. Press "Generate Telegram Token" then the app will copy the "Telegram Token" to clipboard and will open a new window into the browser to the Bot web page.
-   6. Paste "Telegram Token" in the Telegram Bot or if it is a Group Chat paste in the group after adding the Bot.
-   7. Press "Get Chat ID" And if everything is ok it will get the chat ID.
-   8. Press Save.
+## Scheduler
 
-3. Go to → Telegram Notification -> New You can configure various notifications in your system to remind you of important activities. As the original [Erpnext Notification](https://erpnext.com/docs/user/manual/en/setting-up/notifications).
+| Schedule | Job | What it does |
+|---|---|---|
+| every minute | `reflection_telegram.outbox.process` | Drains due Outbox rows. Overlapping runs take a lock and skip. |
+| every 5 minutes | `reflection_telegram.webhook.poll` | Only for bots with polling on and no webhook registered. |
 
-   Here chose the profile of "Telegram User Settings" want to send to him the notification or use the checkbox "Dynamic Recipients" to get the recipient from the DocType dynamically if it has a Link Field like "Customer", "Supplier", "Student" or "Employee", for this it needs to set up a "Telegram User Settings" for the customer, supplier ...
+## Notes
 
-4. Also, you can send directly a Telegram message from any form view by going to the Menu and click "Send To Telegram".
+- **Webhook and polling are mutually exclusive at Telegram's end.** While a webhook is
+  registered, `getUpdates` returns nothing, so the polling job skips those bots.
+- **Telegram discards undelivered updates after 24 hours.** This only matters when polling;
+  with a webhook, updates arrive immediately.
+- **Group privacy mode.** In a group the bot only sees messages that start with `/`. Deep
+  links arrive as `/start <payload>`, so they work without turning privacy mode off.
+- The webhook endpoint is public by necessity. It is protected by a per-bot secret that
+  Telegram sends in the `X-Telegram-Bot-Api-Secret-Token` header; anything else gets a 403.
 
-5. When the app send a Telegram Notification it will write a new log into Extra Notifications > Extra Notification Log .
-
-
-
-## SMS Notifications:
-
-in Extra Notifications:
-
-1. Go to → SMS Settings and set it up as [here](https://docs.erpnext.com/docs/user/manual/en/setting-up/sms-setting).
-
-2. Go to → SMS Notification → New
-
-   You can configure various notifications in your system to remind you of important activities. As the original [Erpnext Notification](https://erpnext.com/docs/user/manual/en/setting-up/notifications).
-
-   Here chose the "Recipients" want to send to them the notification or use the checkbox "Dynamic Recipients" to get the recipient from the DocType dynamically if it has a Link Field like "Customer", "Supplier", "Student" or "Employee", for this it needs to set up a Contact for the customer, supplier..., and make sure the contact is related to the customer or supplier... and has Primary Mobile number as default.
-
-3. Press Save.
-
-
-
-## Date Notifications:
-
-in Extra Notifications:
-
-1. Go to → Date Notification → New.
-2. Choose the DocType Name.
-3. Press "Get Date Fields"
-4. Choose the wanted fields an delete the rest.
-5. Configure when the alert will be trigger by selecting "Days Before" or "Days After" and selecting a number of days for each field.
-6. Configure the "Conditions" if need it.
-7. Press Save.
-
-When the Date Notification is trigger it will send an email to the related user and it will write a new log into Extra Notifications > Extra Notification Log .
-
-
-
-## Dependencies
-
-1. [Frappe](https://github.com/frappe/frappe) Version 12+
-2. Python Version  3+
-3. [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-
-
-
-## License
+## Licence
 
 MIT

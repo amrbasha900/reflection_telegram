@@ -2,3 +2,4 @@
 reflection_telegram.patches.v2_0.rename_from_erpnext_telegram_integration
 
 [post_model_sync]
+reflection_telegram.patches.v2_0.backfill_qr_codes

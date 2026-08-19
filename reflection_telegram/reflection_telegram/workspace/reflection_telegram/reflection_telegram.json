@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"wWIP4oIdV3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Reflection Telegram</span>\",\"col\":12}},{\"id\":\"xa-K69YxbS\",\"type\":\"card\",\"data\":{\"card_name\":\"Telegram\",\"col\":4}}]",
+ "content": "[{\"id\": \"hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Reflection Telegram</span>\", \"col\": 12}}, {\"id\": \"sc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Telegram QR Codes\", \"col\": 3}}, {\"id\": \"c1\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}, {\"id\": \"c2\", \"type\": \"card\", \"data\": {\"card_name\": \"Sending\", \"col\": 4}}, {\"id\": \"c3\", \"type\": \"card\", \"data\": {\"card_name\": \"Notifications\", \"col\": 4}}]",
  "creation": "2024-05-03 13:08:48.096644",
  "custom_blocks": [],
  "docstatus": 0,
@@ -15,8 +15,8 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Telegram",
-   "link_count": 6,
+   "label": "Setup",
+   "link_count": 2,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -39,6 +39,42 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sending",
+   "link_count": 2,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Telegram Broadcast",
+   "link_count": 0,
+   "link_to": "Telegram Broadcast",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Telegram Outbox",
+   "link_count": 0,
+   "link_to": "Telegram Outbox",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Notifications",
+   "link_count": 4,
+   "onboard": 0,
+   "type": "Card Break"
   },
   {
    "hidden": 0,
@@ -81,7 +117,7 @@
    "type": "Link"
   }
  ],
- "modified": "2024-05-22 10:15:38.002465",
+ "modified": "2026-08-19 15:20:05.519265",
  "modified_by": "Administrator",
  "module": "Reflection Telegram",
  "name": "Reflection Telegram",
@@ -92,6 +128,14 @@
  "quick_lists": [],
  "roles": [],
  "sequence_id": 41.0,
- "shortcuts": [],
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Telegram QR Codes",
+   "link_to": "telegram-qr",
+   "type": "Page"
+  }
+ ],
  "title": "Reflection Telegram"
 }

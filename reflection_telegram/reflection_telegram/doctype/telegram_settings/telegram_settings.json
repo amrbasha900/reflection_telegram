@@ -8,7 +8,18 @@
  "field_order": [
   "settings_name",
   "bot_name",
-  "telegram_token"
+  "telegram_token",
+  "linking_section",
+  "webhook_status",
+  "webhook_url",
+  "column_break_linking",
+  "enable_polling",
+  "webhook_secret",
+  "last_update_id",
+  "sending_section",
+  "messages_per_minute",
+  "column_break_sending",
+  "max_attempts"
  ],
  "fields": [
   {
@@ -33,9 +44,76 @@
    "in_list_view": 1,
    "label": "Telegram Bot Name",
    "reqd": 1
+  },
+  {
+   "fieldname": "linking_section",
+   "fieldtype": "Section Break",
+   "label": "Chat Linking"
+  },
+  {
+   "default": "Not Registered",
+   "fieldname": "webhook_status",
+   "fieldtype": "Data",
+   "label": "Webhook Status",
+   "read_only": 1
+  },
+  {
+   "description": "Telegram posts updates here the moment someone scans a QR code.",
+   "fieldname": "webhook_url",
+   "fieldtype": "Small Text",
+   "label": "Webhook URL",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_linking",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Fallback for when no webhook is registered. Slower (up to 5 minutes) and Telegram drops undelivered updates after 24 hours.",
+   "fieldname": "enable_polling",
+   "fieldtype": "Check",
+   "label": "Poll Telegram Every 5 Minutes"
+  },
+  {
+   "fieldname": "webhook_secret",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Webhook Secret",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_update_id",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Last Update ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sending_section",
+   "fieldtype": "Section Break",
+   "label": "Sending Limits"
+  },
+  {
+   "default": "20",
+   "description": "Pacing for queued/bulk sends. 20 leaves generous headroom under Telegram's limits.",
+   "fieldname": "messages_per_minute",
+   "fieldtype": "Int",
+   "label": "Messages Per Minute"
+  },
+  {
+   "fieldname": "column_break_sending",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "3",
+   "description": "How many times a message is retried before it is marked Failed.",
+   "fieldname": "max_attempts",
+   "fieldtype": "Int",
+   "label": "Max Attempts Per Message"
   }
  ],
- "modified": "2020-04-21 03:12:11.283736",
+ "modified": "2026-08-19 15:12:21.541658",
  "modified_by": "Administrator",
  "module": "Reflection Telegram",
  "name": "Telegram Settings",

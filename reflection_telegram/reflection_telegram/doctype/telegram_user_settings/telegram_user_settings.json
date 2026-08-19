@@ -13,11 +13,15 @@
   "telegram_settings",
   "section_break_4",
   "is_group_chat",
-  "generate_telegram_token",
   "telegram_token",
   "column_break_9",
-  "get_chat_id",
-  "telegram_chat_id"
+  "telegram_chat_id",
+  "qr_section",
+  "qr_code",
+  "column_break_qr",
+  "deep_link",
+  "linked_on",
+  "linked_chat_title"
  ],
  "fields": [
   {
@@ -47,14 +51,11 @@
    "fieldtype": "Section Break"
   },
   {
+   "description": "Sent automatically as /start <payload> when the QR code is scanned.",
    "fieldname": "telegram_token",
    "fieldtype": "Data",
-   "label": "Telegram Token"
-  },
-  {
-   "fieldname": "get_chat_id",
-   "fieldtype": "Button",
-   "label": "Get Chat ID"
+   "label": "Link Payload",
+   "read_only": 1
   },
   {
    "fieldname": "telegram_chat_id",
@@ -81,13 +82,42 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "generate_telegram_token",
-   "fieldtype": "Button",
-   "label": "Generate Telegram Token"
+   "fieldname": "qr_section",
+   "fieldtype": "Section Break",
+   "label": "QR Onboarding"
+  },
+  {
+   "fieldname": "qr_code",
+   "fieldtype": "Attach Image",
+   "label": "QR Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_qr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Scanning the QR opens this link, and pressing START sends the token automatically.",
+   "fieldname": "deep_link",
+   "fieldtype": "Small Text",
+   "label": "Deep Link",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_on",
+   "fieldtype": "Datetime",
+   "label": "Linked On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_chat_title",
+   "fieldtype": "Data",
+   "label": "Linked Chat",
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2023-01-16 14:21:40.062556",
+ "modified": "2026-08-19 15:11:54.160615",
  "modified_by": "Administrator",
  "module": "Reflection Telegram",
  "name": "Telegram User Settings",

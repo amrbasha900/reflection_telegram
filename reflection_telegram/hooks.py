@@ -161,23 +161,22 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-	# 	"all": [
-	# 		"reflection_telegram.tasks.all"
-	# 	],
+	"cron": {
+		# The outbox paces itself internally; this just wakes it up. Overlapping
+		# runs take a lock and skip, so a slow batch cannot pile up.
+		"* * * * *": [
+			"reflection_telegram.outbox.process",
+		],
+		# Fallback for bots with `enable_polling` set and no webhook registered.
+		"*/5 * * * *": [
+			"reflection_telegram.webhook.poll",
+		],
+	},
 	"daily": [
 		"reflection_telegram.reflection_telegram.doctype.telegram_notification.telegram_notification.trigger_daily_alerts",
 		"reflection_telegram.reflection_telegram.doctype.sms_notification.sms_notification.trigger_daily_alerts",
 		"reflection_telegram.extra_notifications.doctype.date_notification.date_notification.trigger_daily_alerts",
 	],
-	# "hourly": [
-	# 	"reflection_telegram.extra_notifications.doctype.date_notification.date_notification.trigger_daily_alerts",
-	# ],
-	# 	"weekly": [
-	# 		"reflection_telegram.tasks.weekly"
-	# 	]
-	# 	"monthly": [
-	# 		"reflection_telegram.tasks.monthly"
-	# 	]
 }
 
 # Testing
