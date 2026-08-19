@@ -4,15 +4,15 @@ include *.json
 include *.md
 include *.py
 include *.txt
-recursive-include erpnext_telegram_integration *.css
-recursive-include erpnext_telegram_integration *.csv
-recursive-include erpnext_telegram_integration *.html
-recursive-include erpnext_telegram_integration *.ico
-recursive-include erpnext_telegram_integration *.js
-recursive-include erpnext_telegram_integration *.json
-recursive-include erpnext_telegram_integration *.md
-recursive-include erpnext_telegram_integration *.png
-recursive-include erpnext_telegram_integration *.py
-recursive-include erpnext_telegram_integration *.svg
-recursive-include erpnext_telegram_integration *.txt
-recursive-exclude erpnext_telegram_integration *.pyc
+recursive-include reflection_telegram *.css
+recursive-include reflection_telegram *.csv
+recursive-include reflection_telegram *.html
+recursive-include reflection_telegram *.ico
+recursive-include reflection_telegram *.js
+recursive-include reflection_telegram *.json
+recursive-include reflection_telegram *.md
+recursive-include reflection_telegram *.png
+recursive-include reflection_telegram *.py
+recursive-include reflection_telegram *.svg
+recursive-include reflection_telegram *.txt
+recursive-exclude reflection_telegram *.pyc

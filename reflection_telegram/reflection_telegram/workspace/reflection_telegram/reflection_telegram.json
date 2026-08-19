@@ -1,0 +1,97 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"wWIP4oIdV3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Reflection Telegram</span>\",\"col\":12}},{\"id\":\"xa-K69YxbS\",\"type\":\"card\",\"data\":{\"card_name\":\"Telegram\",\"col\":4}}]",
+ "creation": "2024-05-03 13:08:48.096644",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "small-message",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Reflection Telegram",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Telegram",
+   "link_count": 6,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Telegram Settings",
+   "link_count": 0,
+   "link_to": "Telegram Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Telegram User Settings",
+   "link_count": 0,
+   "link_to": "Telegram User Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Telegram Notification",
+   "link_count": 0,
+   "link_to": "Telegram Notification",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SMS Notification",
+   "link_count": 0,
+   "link_to": "SMS Notification",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Date Notification",
+   "link_count": 0,
+   "link_to": "Date Notification",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Extra Notification Log",
+   "link_count": 0,
+   "link_to": "Extra Notification Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2024-05-22 10:15:38.002465",
+ "modified_by": "Administrator",
+ "module": "Reflection Telegram",
+ "name": "Reflection Telegram",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 41.0,
+ "shortcuts": [],
+ "title": "Reflection Telegram"
+}

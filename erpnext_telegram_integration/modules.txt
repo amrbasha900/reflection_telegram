@@ -1,2 +1,0 @@
-Erpnext Telegram Integration
-Extra Notifications

@@ -1,4 +1,4 @@
-# Erpnext Telegram Integration And Notifications
+# Reflection Telegram And Notifications
 
 Telegram Integration and Extra Notifications For Frappe & Erpnext to sending fast notifications for more productivity.
 
@@ -26,9 +26,9 @@ Telegram Integration and Extra Notifications For Frappe & Erpnext to sending fas
 
 1. `./env/bin/pip install python-telegram-bot --upgrade` "*This command is necessary to install the python-telegram-bot into bench environment. Otherwise, the pip3/pip command will install it in the python environment"*
 
-2. `bench get-app erpnext_telegram_integration https://github.com/yrestom/erpnext_telegram.git`
+2. `bench get-app reflection_telegram https://github.com/yrestom/erpnext_telegram.git`
 
-3. `bench --site [your.site.name] install-app erpnext_telegram_integration`
+3. `bench --site [your.site.name] install-app reflection_telegram`
 
 4. `bench build`
 
@@ -49,7 +49,7 @@ Telegram Integration and Extra Notifications For Frappe & Erpnext to sending fas
 
 ## Telegram Notifications:
 
-In Erpnext Telegram Integration
+In Reflection Telegram
 
 1. Go to → Telegram Settings -> New Enter Telegram Bot Token
 

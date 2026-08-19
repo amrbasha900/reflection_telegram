@@ -3,6 +3,6 @@
 *.egg-info
 *.swp
 tags
-erpnext_telegram_integration/docs/current
+reflection_telegram/docs/current
 */public/dist/
 __pycache__/
