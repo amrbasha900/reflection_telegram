@@ -19,7 +19,13 @@
   "sending_section",
   "messages_per_minute",
   "column_break_sending",
-  "max_attempts"
+  "max_attempts",
+  "logging_section",
+  "log_outgoing",
+  "save_incoming_messages",
+  "column_break_logging",
+  "auto_disable_blocked",
+  "log_retention_days"
  ],
  "fields": [
   {
@@ -111,9 +117,46 @@
    "fieldname": "max_attempts",
    "fieldtype": "Int",
    "label": "Max Attempts Per Message"
+  },
+  {
+   "fieldname": "logging_section",
+   "fieldtype": "Section Break",
+   "label": "Logging"
+  },
+  {
+   "default": "1",
+   "description": "Record every message this bot sends in Telegram Message Log, including ones sent inline by other apps.",
+   "fieldname": "log_outgoing",
+   "fieldtype": "Check",
+   "label": "Log Outgoing Messages"
+  },
+  {
+   "default": "0",
+   "description": "Store messages people send to the bot, with the full Telegram payload. Off by default -- turn it on only if you need the record.",
+   "fieldname": "save_incoming_messages",
+   "fieldtype": "Check",
+   "label": "Save Incoming Messages"
+  },
+  {
+   "fieldname": "column_break_logging",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Telegram reports a block instantly via my_chat_member. With this on, the queue skips those chats instead of burning attempts on them.",
+   "fieldname": "auto_disable_blocked",
+   "fieldtype": "Check",
+   "label": "Stop Sending to Blocked Chats"
+  },
+  {
+   "default": "90",
+   "description": "0 keeps them forever.",
+   "fieldname": "log_retention_days",
+   "fieldtype": "Int",
+   "label": "Delete Logs After (Days)"
   }
  ],
- "modified": "2026-08-19 15:12:21.541658",
+ "modified": "2026-08-19 23:31:58.571543",
  "modified_by": "Administrator",
  "module": "Reflection Telegram",
  "name": "Telegram Settings",

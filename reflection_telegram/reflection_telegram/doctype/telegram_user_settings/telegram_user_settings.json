@@ -21,7 +21,9 @@
   "column_break_qr",
   "deep_link",
   "linked_on",
-  "linked_chat_title"
+  "linked_chat_title",
+  "chat_status",
+  "status_changed_on"
  ],
  "fields": [
   {
@@ -114,10 +116,25 @@
    "fieldtype": "Data",
    "label": "Linked Chat",
    "read_only": 1
+  },
+  {
+   "default": "Active",
+   "description": "Blocked means Telegram told us the user blocked the bot, or it was removed from the group.",
+   "fieldname": "chat_status",
+   "fieldtype": "Select",
+   "label": "Chat Status",
+   "options": "Active\nBlocked\nLeft",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_changed_on",
+   "fieldtype": "Datetime",
+   "label": "Status Changed On",
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2026-08-19 15:11:54.160615",
+ "modified": "2026-08-19 23:31:58.571543",
  "modified_by": "Administrator",
  "module": "Reflection Telegram",
  "name": "Telegram User Settings",

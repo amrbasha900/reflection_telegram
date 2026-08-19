@@ -173,6 +173,7 @@ scheduler_events = {
 		],
 	},
 	"daily": [
+		"reflection_telegram.message_log.purge",
 		"reflection_telegram.reflection_telegram.doctype.telegram_notification.telegram_notification.trigger_daily_alerts",
 		"reflection_telegram.reflection_telegram.doctype.sms_notification.sms_notification.trigger_daily_alerts",
 		"reflection_telegram.extra_notifications.doctype.date_notification.date_notification.trigger_daily_alerts",

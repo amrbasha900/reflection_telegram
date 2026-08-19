@@ -130,36 +130,49 @@ def classify(exc: Exception) -> TelegramError:
 	return TransientError(str(exc))
 
 
-async def _deliver(bot, chat_id, text, document=None, filename=None, parse_mode=None):
-	"""Send one logical message, splitting it if Telegram would reject the length."""
+async def _deliver(bot, chat_id, text, document=None, filename=None, parse_mode=None) -> list[int]:
+	"""Send one logical message, splitting it if Telegram would reject the length.
+
+	Returns the Telegram message ids. That id is the only delivery signal the Bot
+	API offers -- it means Telegram accepted the message, not that anyone read it.
+	"""
+	message_ids = []
+
 	if document:
 		caption = text if text and len(text) <= MAX_CAPTION_LENGTH else None
-		await bot.send_document(
+		sent = await bot.send_document(
 			chat_id=chat_id,
 			document=document,
 			filename=filename,
 			caption=caption,
 			parse_mode=parse_mode,
 		)
+		message_ids.append(sent.message_id)
+
 		if text and not caption:
 			for chunk in split_message(text):
-				await bot.send_message(chat_id=chat_id, text=chunk, parse_mode=parse_mode)
-		return
+				sent = await bot.send_message(chat_id=chat_id, text=chunk, parse_mode=parse_mode)
+				message_ids.append(sent.message_id)
+
+		return message_ids
 
 	for chunk in split_message(text):
-		await bot.send_message(chat_id=chat_id, text=chunk, parse_mode=parse_mode)
+		sent = await bot.send_message(chat_id=chat_id, text=chunk, parse_mode=parse_mode)
+		message_ids.append(sent.message_id)
+
+	return message_ids
 
 
-def send(token: str, chat_id: str, text: str, document=None, filename=None, parse_mode=None):
+def send(token: str, chat_id: str, text: str, document=None, filename=None, parse_mode=None) -> list[int]:
 	"""Send a single message. Raises PermanentError or TransientError on failure."""
 
 	async def _run():
 		bot = telegram.Bot(token=token)
 		async with bot:
-			await _deliver(bot, chat_id, text, document, filename, parse_mode)
+			return await _deliver(bot, chat_id, text, document, filename, parse_mode)
 
 	try:
-		asyncio.run(_run())
+		return asyncio.run(_run())
 	except Exception as exc:
 		raise classify(exc) from exc
 
@@ -169,8 +182,8 @@ def send_many(token: str, items: list[dict], on_result=None, pause: float = 0.0)
 
 	`items` are dicts of chat_id / text / document / filename / parse_mode plus
 	whatever the caller needs to correlate results. `on_result` is called with
-	(item, error) after each attempt -- error is None on success -- so the caller
-	can record progress as it happens rather than only at the end.
+	(item, error, message_ids) after each attempt -- error is None on success --
+	so the caller can record progress as it happens rather than only at the end.
 	"""
 
 	async def _run():
@@ -178,8 +191,9 @@ def send_many(token: str, items: list[dict], on_result=None, pause: float = 0.0)
 		async with bot:
 			for index, item in enumerate(items):
 				error = None
+				message_ids = []
 				try:
-					await _deliver(
+					message_ids = await _deliver(
 						bot,
 						item["chat_id"],
 						item.get("text"),
@@ -191,7 +205,7 @@ def send_many(token: str, items: list[dict], on_result=None, pause: float = 0.0)
 					error = classify(exc)
 
 				if on_result:
-					on_result(item, error)
+					on_result(item, error, message_ids)
 
 				if pause and index < len(items) - 1:
 					await asyncio.sleep(pause)

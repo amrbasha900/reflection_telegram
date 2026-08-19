@@ -22,7 +22,7 @@ import frappe
 from frappe import _
 from frappe.utils import cstr
 
-from reflection_telegram import onboarding, telegram_client
+from reflection_telegram import message_log, onboarding, telegram_client
 
 WEBHOOK_METHOD = "reflection_telegram.webhook.receive"
 SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
@@ -58,9 +58,10 @@ def build_webhook_url(settings_name: str) -> str:
 def register(telegram_settings: str) -> dict:
 	"""Point the bot at this site and store the shared secret.
 
-	`allowed_updates` is narrowed to messages: this integration only ever cares
-	about someone sending the bot a payload, and asking for less means Telegram
-	sends less.
+	`allowed_updates` is narrowed to the two kinds that matter: `message` carries
+	the payload a scan sends, and `my_chat_member` is the only status signal
+	Telegram gives a bot -- it fires the moment someone blocks or unblocks it.
+	Asking for less means Telegram sends less.
 	"""
 	frappe.only_for("System Manager")
 
@@ -75,7 +76,7 @@ def register(telegram_settings: str) -> dict:
 		"set_webhook",
 		url=url,
 		secret_token=secret,
-		allowed_updates=["message"],
+		allowed_updates=["message", "my_chat_member"],
 		drop_pending_updates=False,
 	)
 
@@ -173,28 +174,74 @@ def _authenticate(settings: str) -> str:
 
 
 def handle_update(update: dict, telegram_settings: str) -> bool:
-	"""Match one Telegram update to a pending record. True when it linked."""
-	message = (update or {}).get("message") or {}
-	text = message.get("text")
+	"""Route one Telegram update. True only when it completed a QR link."""
+	update = update or {}
+
+	if update.get("my_chat_member"):
+		handle_membership(update["my_chat_member"], telegram_settings)
+		return False
+
+	return handle_message(update, telegram_settings)
+
+
+def handle_message(update: dict, telegram_settings: str) -> bool:
+	"""Match an inbound message to a pending QR, and log it either way."""
+	message = update.get("message") or {}
 	chat = message.get("chat") or {}
+	text = message.get("text")
 
-	if not text or not chat.get("id"):
+	if not chat.get("id"):
 		return False
 
-	doc = onboarding.find_by_payload(text, telegram_settings)
-	if not doc:
-		return False
+	doc = onboarding.find_by_payload(text, telegram_settings) if text else None
+	linked = False
 
-	chat_title = chat.get("title") or " ".join(
-		filter(None, [chat.get("first_name"), chat.get("last_name")])
-	)
+	if doc:
+		chat_title = chat.get("title") or " ".join(
+			filter(None, [chat.get("first_name"), chat.get("last_name")])
+		)
+		if onboarding.mark_linked(doc, chat["id"], chat_title):
+			frappe.db.commit()
+			_confirm(telegram_settings, chat["id"], doc)
+			linked = True
+		telegram_user = doc.name
+	else:
+		telegram_user = message_log.find_user_by_chat(telegram_settings, chat["id"])
 
-	if not onboarding.mark_linked(doc, chat["id"], chat_title):
-		return False
-
+	message_log.record_incoming(telegram_settings, update, telegram_user)
 	frappe.db.commit()
-	_confirm(telegram_settings, chat["id"], doc)
-	return True
+
+	return linked
+
+
+def handle_membership(payload: dict, telegram_settings: str):
+	"""Track blocks and unblocks.
+
+	This is the closest thing the Bot API has to a delivery status: Telegram
+	reports a block the moment it happens, which is worth far more than
+	discovering it 250 messages later through a 403.
+	"""
+	chat = payload.get("chat") or {}
+	status = ((payload.get("new_chat_member") or {}).get("status") or "").lower()
+
+	telegram_user = message_log.find_user_by_chat(telegram_settings, chat.get("id"))
+	if not telegram_user:
+		return
+
+	if status == "kicked":
+		chat_status = "Blocked"
+	elif status == "left":
+		chat_status = "Left"
+	else:
+		chat_status = "Active"
+
+	frappe.db.set_value(
+		"Telegram User Settings",
+		telegram_user,
+		{"chat_status": chat_status, "status_changed_on": frappe.utils.now_datetime()},
+		update_modified=False,
+	)
+	frappe.db.commit()
 
 
 def _confirm(telegram_settings: str, chat_id, doc):

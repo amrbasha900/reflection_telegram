@@ -45,9 +45,17 @@ api.send_message(
 )
 ```
 
-Returns `{"status": "Sent"}`, or `{"status": "Queued", "outbox": "<name>"}` when `queue=1`.
+Returns `{"status": "Sent", "message_ids": [...], "log": "<name>"}`, or
+`{"status": "Queued", "outbox": "<name>"}` when `queue=1`.
 
-Raises if the recipient has no chat id yet — that means the QR has not been scanned.
+`message_ids` are Telegram's own ids. They confirm Telegram **accepted** the message —
+Telegram gives bots no delivery or read receipt beyond that.
+
+Raises if the recipient has no chat id yet (the QR has not been scanned), or if they have
+blocked the bot and **Stop Sending to Blocked Chats** is on.
+
+Every send is written to **Telegram Message Log**, success or failure, including sends made
+inline by other apps.
 
 **Text longer than 4096 characters is split across several messages** rather than truncated,
 because Telegram rejects anything over that limit outright.
@@ -124,10 +132,14 @@ api.send_bulk(
 )
 ```
 
-Returns `{"broadcast": "<name>", "queued": <count>}`.
+Returns `{"broadcast": "<name>", "queued": <count>, "skipped": <count>}`.
 
 Every recipient must already be linked. If any are not, the call raises before queueing
 anything, naming how many and the first offender — a partial bulk send is worse than none.
+
+Recipients who have since **blocked the bot** are a different case: they are dropped and
+counted under `skipped` rather than raising, because one person blocking should not stop a
+run of 250.
 
 ```python
 recipients = frappe.get_all(
@@ -269,3 +281,30 @@ upstream branches on which one it got:
 | `... has no chat id yet` | The QR has not been scanned | Send the recipient their QR card |
 | `Wrong response from the webhook: 403` | Secret mismatch | Press **Register Webhook** again |
 | Nothing links, no errors | A webhook is registered but the site is unreachable | **Check Bot** shows Telegram's last error |
+
+
+---
+
+# Message status, honestly
+
+There is **no delivery or read receipt** in the Telegram Bot API. None of the 25 update
+types a bot can subscribe to reports the state of a message you sent. Do not build
+"delivered" or "seen" on top of this integration — the data does not exist.
+
+What you can rely on:
+
+| You know | How |
+|---|---|
+| Telegram accepted the message | `message_ids` in the `send_message` return, and the `message_id` column in Telegram Message Log |
+| The send failed, and why | `status = Failed` plus `error` in the log |
+| The user blocked the bot | `my_chat_member` webhook → **Chat Status** on Telegram User Settings, within seconds |
+| The user replied | an Incoming row in the log, if **Save Incoming Messages** is on |
+
+## reflection_telegram.message_log
+
+| Function | Purpose |
+|---|---|
+| `record_outgoing(...)` | Log a send. Never raises — logging must not break sending |
+| `record_incoming(telegram_settings, update, telegram_user)` | Log an inbound message, if the bot is configured to keep them |
+| `find_user_by_chat(telegram_settings, chat_id)` | The linking record for a chat id |
+| `purge()` | Daily retention cleanup |

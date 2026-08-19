@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Reflection Telegram</span>\", \"col\": 12}}, {\"id\": \"sc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Telegram QR Codes\", \"col\": 3}}, {\"id\": \"c1\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}, {\"id\": \"c2\", \"type\": \"card\", \"data\": {\"card_name\": \"Sending\", \"col\": 4}}, {\"id\": \"c3\", \"type\": \"card\", \"data\": {\"card_name\": \"Notifications\", \"col\": 4}}]",
+ "content": "[{\"id\": \"hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Reflection Telegram</span>\", \"col\": 12}}, {\"id\": \"sc1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Telegram QR Codes\", \"col\": 3}}, {\"id\": \"sc2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Telegram Message Log\", \"col\": 3}}, {\"id\": \"c1\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}, {\"id\": \"c2\", \"type\": \"card\", \"data\": {\"card_name\": \"Sending\", \"col\": 4}}, {\"id\": \"c3\", \"type\": \"card\", \"data\": {\"card_name\": \"Notifications\", \"col\": 4}}]",
  "creation": "2024-05-03 13:08:48.096644",
  "custom_blocks": [],
  "docstatus": 0,
@@ -44,9 +44,19 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Sending",
-   "link_count": 2,
+   "link_count": 3,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Telegram Message Log",
+   "link_count": 0,
+   "link_to": "Telegram Message Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -117,7 +127,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-08-19 15:20:05.519265",
+ "modified": "2026-08-19 23:34:15.178475",
  "modified_by": "Administrator",
  "module": "Reflection Telegram",
  "name": "Reflection Telegram",
@@ -135,6 +145,13 @@
    "label": "Telegram QR Codes",
    "link_to": "telegram-qr",
    "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Telegram Message Log",
+   "link_to": "Telegram Message Log",
+   "type": "DocType"
   }
  ],
  "title": "Reflection Telegram"

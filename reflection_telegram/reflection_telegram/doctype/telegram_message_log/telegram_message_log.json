@@ -1,0 +1,231 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "hash",
+ "creation": "2026-08-20 02:31:44.662669",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "direction",
+  "status",
+  "telegram_settings",
+  "telegram_user",
+  "party",
+  "party_name",
+  "column_break_head",
+  "timestamp",
+  "chat_id",
+  "message_id",
+  "outbox",
+  "broadcast",
+  "section_message",
+  "message",
+  "attachment",
+  "error",
+  "section_ref",
+  "reference_doctype",
+  "reference_name",
+  "section_sender",
+  "from_first_name",
+  "from_username",
+  "column_break_sender",
+  "from_user_id",
+  "chat_type",
+  "section_raw",
+  "raw_payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Direction",
+   "options": "Outgoing\nIncoming",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Sent\nFailed\nReceived"
+  },
+  {
+   "fieldname": "telegram_settings",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Telegram Settings",
+   "options": "Telegram Settings"
+  },
+  {
+   "fieldname": "telegram_user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Telegram User",
+   "options": "Telegram User Settings"
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Data",
+   "label": "Party Type"
+  },
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "label": "Party"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Timestamp"
+  },
+  {
+   "fieldname": "chat_id",
+   "fieldtype": "Data",
+   "label": "Chat ID"
+  },
+  {
+   "description": "Telegram's id for the message. Confirms Telegram accepted it -- Telegram gives bots no delivery or read receipt beyond this.",
+   "fieldname": "message_id",
+   "fieldtype": "Int",
+   "label": "Telegram Message ID"
+  },
+  {
+   "fieldname": "outbox",
+   "fieldtype": "Link",
+   "label": "Outbox Row",
+   "options": "Telegram Outbox"
+  },
+  {
+   "fieldname": "broadcast",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Broadcast",
+   "options": "Telegram Broadcast"
+  },
+  {
+   "fieldname": "section_message",
+   "fieldtype": "Section Break",
+   "label": "Message"
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Long Text",
+   "label": "Message"
+  },
+  {
+   "fieldname": "attachment",
+   "fieldtype": "Data",
+   "label": "Attachment"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_ref",
+   "fieldtype": "Section Break",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Document Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.direction=='Incoming'",
+   "fieldname": "section_sender",
+   "fieldtype": "Section Break",
+   "label": "Sender Details"
+  },
+  {
+   "fieldname": "from_first_name",
+   "fieldtype": "Data",
+   "label": "From Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "from_username",
+   "fieldtype": "Data",
+   "label": "From Username",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_sender",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_user_id",
+   "fieldtype": "Data",
+   "label": "From User ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chat_type",
+   "fieldtype": "Data",
+   "label": "Chat Type",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.direction=='Incoming'",
+   "fieldname": "section_raw",
+   "fieldtype": "Section Break",
+   "label": "Raw Update"
+  },
+  {
+   "fieldname": "raw_payload",
+   "fieldtype": "Code",
+   "label": "Raw Payload",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-20 02:31:44.662669",
+ "modified_by": "Administrator",
+ "module": "Reflection Telegram",
+ "name": "Telegram Message Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "search_fields": "telegram_user,chat_id,direction",
+ "sort_field": "timestamp",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "chat_id"
+}

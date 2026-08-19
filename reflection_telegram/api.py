@@ -21,7 +21,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, cstr
 
-from reflection_telegram import onboarding, outbox, telegram_client
+from reflection_telegram import message_log, onboarding, outbox, telegram_client
 
 
 @frappe.whitelist()
@@ -80,15 +80,42 @@ def send_message(
 		)
 		return {"status": "Queued", "outbox": names[0]}
 
-	telegram_client.send(
-		telegram_client.get_token(settings),
-		chat_id,
-		message,
-		document=document,
-		filename=filename,
-		parse_mode=parse_mode,
+	try:
+		message_ids = telegram_client.send(
+			telegram_client.get_token(settings),
+			chat_id,
+			message,
+			document=document,
+			filename=filename,
+			parse_mode=parse_mode,
+		)
+	except Exception as exc:
+		# Log the failure before re-raising, so a caller that swallows the
+		# exception still leaves a trace of what was attempted.
+		message_log.record_outgoing(
+			settings,
+			telegram_user=telegram_user,
+			chat_id=chat_id,
+			message=message,
+			error=exc,
+			attachment=filename,
+			reference_doctype=reference_doctype,
+			reference_name=reference_name,
+		)
+		raise
+
+	log = message_log.record_outgoing(
+		settings,
+		telegram_user=telegram_user,
+		chat_id=chat_id,
+		message=message,
+		message_ids=message_ids,
+		attachment=filename,
+		reference_doctype=reference_doctype,
+		reference_name=reference_name,
 	)
-	return {"status": "Sent"}
+
+	return {"status": "Sent", "message_ids": message_ids, "log": log}
 
 
 @frappe.whitelist()
@@ -129,12 +156,16 @@ def send_bulk(
 		create_broadcast: set 0 to queue without a Broadcast record to track it.
 
 	Returns:
-		{"broadcast": "<name>", "queued": <count>}. Nothing is sent inline -- the
-		scheduler drains the queue a minute at a time.
+		{"broadcast": "<name>", "queued": <count>, "skipped": <count>}. Nothing is
+		sent inline -- the scheduler drains the queue a minute at a time.
+
+	Recipients who never scanned their QR raise, because that is a mistake in the
+	caller's list. Recipients who have since blocked the bot are dropped and
+	counted instead -- one person blocking should not stop a run of 250.
 	"""
 	messages = _as_list(messages)
 	if not messages:
-		return {"broadcast": None, "queued": 0}
+		return {"broadcast": None, "queued": 0, "skipped": 0}
 
 	unlinked = [m["telegram_user"] for m in messages if not _chat_id(m["telegram_user"])]
 	if unlinked:
@@ -143,6 +174,13 @@ def send_bulk(
 				len(unlinked), unlinked[0]
 			)
 		)
+
+	total = len(messages)
+	messages = [m for m in messages if _is_sendable(m["telegram_user"])]
+	skipped = total - len(messages)
+
+	if not messages:
+		frappe.throw(_("Every recipient on that list has blocked the bot"))
 
 	telegram_settings = telegram_settings or frappe.db.get_value(
 		"Telegram User Settings", messages[0]["telegram_user"], "telegram_settings"
@@ -168,7 +206,11 @@ def send_bulk(
 		rate=rate,
 	)
 
-	return {"broadcast": broadcast.name if broadcast else None, "queued": len(queued)}
+	return {
+		"broadcast": broadcast.name if broadcast else None,
+		"queued": len(queued),
+		"skipped": skipped,
+	}
 
 
 @frappe.whitelist()
@@ -230,9 +272,11 @@ def ensure_link(party_type: str, party: str, telegram_settings: str, is_group_ch
 
 
 def _resolve_target(telegram_user: str) -> tuple[str, str]:
-	settings, chat_id = frappe.db.get_value(
-		"Telegram User Settings", telegram_user, ["telegram_settings", "telegram_chat_id"]
-	) or (None, None)
+	settings, chat_id, chat_status = frappe.db.get_value(
+		"Telegram User Settings",
+		telegram_user,
+		["telegram_settings", "telegram_chat_id", "chat_status"],
+	) or (None, None, None)
 
 	if not settings:
 		frappe.throw(
@@ -244,7 +288,25 @@ def _resolve_target(telegram_user: str) -> tuple[str, str]:
 			_("{0} has no chat id yet -- the QR code has not been scanned").format(telegram_user)
 		)
 
+	if chat_status in ("Blocked", "Left") and cint(
+		frappe.db.get_value("Telegram Settings", settings, "auto_disable_blocked")
+	):
+		frappe.throw(
+			_("{0} has blocked the bot, so Telegram will reject the message").format(telegram_user)
+		)
+
 	return settings, chat_id
+
+
+def _is_sendable(telegram_user: str) -> bool:
+	"""Linked, and not known to have blocked the bot."""
+	row = frappe.db.get_value(
+		"Telegram User Settings", telegram_user, ["telegram_chat_id", "chat_status"], as_dict=True
+	)
+	if not row or not row.telegram_chat_id:
+		return False
+
+	return row.chat_status not in ("Blocked", "Left")
 
 
 def _chat_id(telegram_user: str) -> str | None:

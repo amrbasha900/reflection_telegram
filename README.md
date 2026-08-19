@@ -120,6 +120,52 @@ also says how long to wait, and the queue honours that exactly, which is what ke
 limit from escalating into a restriction. Permanent failures — the bot was blocked, the chat
 is gone, the token is wrong — are marked Failed immediately rather than retried.
 
+## The log, and what "status" can mean
+
+**Telegram gives bots no delivery or read receipt.** There is no update type that
+reports a sent message was delivered, and nothing arrives later to say it was read. Any
+integration claiming otherwise is inventing it. What you actually get is:
+
+| Signal | Where it comes from | What it means |
+|---|---|---|
+| `message_id` | the reply to `sendMessage` | Telegram **accepted** the message |
+| `403 Forbidden` | the send attempt | the user blocked the bot |
+| `400 chat not found` | the send attempt | the chat is gone |
+| `429` + `retry_after` | the send attempt | you are going too fast |
+| **`my_chat_member`** | webhook | someone blocked or unblocked the bot, **as it happens** |
+| `message` | webhook | someone replied |
+
+**Telegram Message Log** records both directions in one place:
+
+- **Outgoing** — every send, whether it went through the queue or was sent inline by
+  another app calling `api.send_message`. Stores the message id on success and the reason
+  on failure, linked back to the Outbox row, the Broadcast, and the source document.
+- **Incoming** — what people send back. Off by default; turn on **Save Incoming Messages**
+  on the Telegram Settings record. When on, each message is stored with its text, a label
+  for any attachment, the sender's name and username, and the complete raw Telegram
+  payload — an inbound message can carry photos, documents, locations or contacts, and
+  keeping the payload means none of that is lost to a guess made in advance.
+
+Nothing is notified about incoming messages; it is a record, not an inbox.
+
+**Telegram Outbox** stays what it was: the queue. A row is Queued, Sending, Sent, Failed or
+Cancelled with its attempt count. The log is the history; the outbox is the work list.
+
+Set **Delete Logs After (Days)** on Telegram Settings (90 by default, 0 keeps forever) —
+a daily job prunes anything older, because a log table otherwise only grows.
+
+### Blocking
+
+With **Stop Sending to Blocked Chats** on (the default), a `my_chat_member` update marks
+the recipient's **Chat Status** as Blocked the moment it happens. After that:
+
+- `api.send_message` refuses rather than attempting the send,
+- `send_bulk` drops those recipients and reports how many under `skipped` — one person
+  blocking should not stop a run of 250,
+- the queue skips their rows instead of spending attempts to be told 403.
+
+If they unblock the bot, the same update sets Chat Status back to Active on its own.
+
 ## Doctypes
 
 | DocType | Purpose |
@@ -128,6 +174,7 @@ is gone, the token is wrong — are marked Failed immediately rather than retrie
 | Telegram User Settings | One recipient: party, payload, deep link, QR, chat id |
 | Telegram Outbox | The sending queue, one row per message |
 | Telegram Broadcast | Groups a bulk send and tracks its progress |
+| Telegram Message Log | History of everything sent and received |
 | Telegram Notification | Event-driven alerts (from the original app) |
 | SMS Notification, Date Notification | Unrelated extras carried over from the original app |
 
@@ -137,6 +184,7 @@ is gone, the token is wrong — are marked Failed immediately rather than retrie
 |---|---|---|
 | every minute | `reflection_telegram.outbox.process` | Drains due Outbox rows. Overlapping runs take a lock and skip. |
 | every 5 minutes | `reflection_telegram.webhook.poll` | Only for bots with polling on and no webhook registered. |
+| daily | `reflection_telegram.message_log.purge` | Prunes log rows past the retention window. |
 
 ## Notes
 

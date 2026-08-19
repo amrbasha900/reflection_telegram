@@ -16,7 +16,7 @@ from frappe.utils import add_to_date, cint, cstr, now_datetime
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
-from reflection_telegram import telegram_client
+from reflection_telegram import message_log, telegram_client
 
 DEFAULT_RATE = 20
 BATCH_LOCK = "reflection_telegram_outbox"
@@ -123,11 +123,28 @@ def process_settings(telegram_settings: str):
 	if not rows:
 		return
 
+	skip_blocked = cint(
+		frappe.db.get_value("Telegram Settings", telegram_settings, "auto_disable_blocked")
+	)
+
 	items = []
 	for row in rows:
-		chat_id = frappe.db.get_value("Telegram User Settings", row.telegram_user, "telegram_chat_id")
+		target = frappe.db.get_value(
+			"Telegram User Settings",
+			row.telegram_user,
+			["telegram_chat_id", "chat_status"],
+			as_dict=True,
+		)
+		chat_id = target.telegram_chat_id if target else None
+
 		if not chat_id:
 			_fail(row, _("{0} has no chat id yet -- the QR code has not been scanned").format(row.telegram_user))
+			continue
+
+		# Telegram told us about the block via my_chat_member, so there is no point
+		# spending an attempt to be told again with a 403.
+		if skip_blocked and target.chat_status in ("Blocked", "Left"):
+			_fail(row, _("{0} has blocked the bot").format(row.telegram_user))
 			continue
 
 		document = filename = None
@@ -165,11 +182,25 @@ def process_settings(telegram_settings: str):
 	token = telegram_client.get_token(telegram_settings)
 	max_attempts = get_max_attempts(telegram_settings)
 
-	def record(item, error):
+	def record(item, error, message_ids):
+		row = item["row"]
+
 		if error is None:
-			_succeed(item["row"])
+			_succeed(row)
 		else:
-			_handle_error(item["row"], error, max_attempts)
+			_handle_error(row, error, max_attempts)
+
+		message_log.record_outgoing(
+			telegram_settings,
+			telegram_user=row.telegram_user,
+			chat_id=item["chat_id"],
+			message=row.message,
+			message_ids=message_ids,
+			error=error,
+			attachment=item.get("filename"),
+			outbox=row.name,
+			broadcast=row.broadcast,
+		)
 		frappe.db.commit()
 
 	telegram_client.send_many(token, items, on_result=record, pause=60.0 / rate)
