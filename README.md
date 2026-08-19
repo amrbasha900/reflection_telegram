@@ -191,6 +191,32 @@ the recipient's **Chat Status** as Blocked the moment it happens. After that:
 
 If they unblock the bot, the same update sets Chat Status back to Active on its own.
 
+## The "Send To Telegram" menu
+
+This app adds a **Send To Telegram** item to every form's menu. It goes through the same
+path as everything else — `send_to_telegram` delegates to `api.send_message` — so those
+sends land in Telegram Message Log, respect a blocked recipient, and get split if they run
+past 4096 characters. Telegram Notification uses the same entry point, so event-driven
+alerts behave identically.
+
+Attaching the document sends a **real PDF**. Two things get in the way of that on a normal
+bench, and both are handled here:
+
+- `frappe.attach_print` silently returns HTML when **Send Print as PDF** is off in Print
+  Settings, and an `.html` attachment is useless in a chat. This app renders the PDF
+  directly instead of asking.
+- The PDF renderer fetches stylesheets over HTTP using `frappe.utils.get_url()`, which
+  outside an HTTP request resolves to `http://<site name>` and fails with
+  `HostNotFoundError`. Rendering pins the host to the site's real domain for the duration.
+
+The same reasoning applies to the "See the document at ..." link: it is built from
+`host_name`, or the first entry in `domains` in site config, so a notification sent by the
+scheduler links somewhere the recipient can actually open.
+
+A notification that fails is logged and skipped, never raised. These run from `doc_events`
+on every doctype, so one unreachable recipient must not be able to stop a business document
+from being saved.
+
 ## Doctypes
 
 | DocType | Purpose |

@@ -207,13 +207,24 @@ def get_context(context):
 		message = message + frappe.render_template(self.message, context)
 		attachment = self.get_attachment(doc)
 		for telegram_user in recipients_telegram_user_list:
-			send_to_telegram(
-				telegram_user=telegram_user,
-				message=message,
-				reference_doctype=doc.doctype,
-				reference_name=doc.name,
-				attachment=attachment,
-			)
+			try:
+				send_to_telegram(
+					telegram_user=telegram_user,
+					message=message,
+					reference_doctype=doc.doctype,
+					reference_name=doc.name,
+					attachment=attachment,
+				)
+			except Exception:
+				# These notifications run from doc_events on every doctype, so an
+				# unreachable recipient must never be able to block a business
+				# document from saving. The failure is already in Telegram Message
+				# Log; this keeps the remaining recipients going.
+				frappe.log_error(
+					title=f"Telegram notification to {telegram_user} failed",
+					message=frappe.get_traceback(),
+				)
+				continue
 
 			doc.message_notification = message
 			doc.from_user = frappe.session.user

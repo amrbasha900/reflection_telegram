@@ -23,31 +23,10 @@ from frappe import _
 from frappe.utils import cstr
 
 from reflection_telegram import message_log, onboarding, telegram_client
+from reflection_telegram.utils import site_base_url
 
 WEBHOOK_METHOD = "reflection_telegram.webhook.receive"
 SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
-
-
-def site_base_url() -> str:
-	"""The public https base URL for this site.
-
-	`frappe.utils.get_url()` answers `http://<site name>` when there is no HTTP
-	request in scope -- which is exactly the case in the scheduler -- so prefer
-	whatever the site config declares before falling back to it.
-	"""
-	host = frappe.conf.get("host_name")
-	if not host:
-		domains = frappe.conf.get("domains") or []
-		host = domains[0] if domains else None
-
-	if not host:
-		host = frappe.utils.get_url()
-
-	host = cstr(host).rstrip("/")
-	if not host.startswith("http"):
-		host = f"https://{host}"
-
-	return host
 
 
 def build_webhook_url(settings_name: str) -> str:

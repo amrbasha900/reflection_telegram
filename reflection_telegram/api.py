@@ -22,6 +22,7 @@ from frappe import _
 from frappe.utils import cint, cstr
 
 from reflection_telegram import message_log, onboarding, outbox, telegram_client
+from reflection_telegram.utils import render_pdf
 
 
 @frappe.whitelist()
@@ -57,10 +58,7 @@ def send_message(
 
 	document = filename = None
 	if attach_print and reference_doctype and reference_name:
-		printed = frappe.attach_print(
-			reference_doctype, reference_name, print_format=print_format, file_name=reference_name
-		)
-		filename, document = printed["fname"], printed["fcontent"]
+		filename, document = render_pdf(reference_doctype, reference_name, print_format)
 	elif file_url:
 		filename, document = telegram_client.resolve_file(file_url)
 

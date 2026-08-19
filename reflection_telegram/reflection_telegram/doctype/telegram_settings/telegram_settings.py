@@ -1,62 +1,68 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2019, Youssef Restom and contributors
+# Copyright (c) 2026, Amr Basha and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
 import frappe
-import telegram
-import asyncio
-from frappe.model.document import Document
-from frappe.utils import get_url_to_form
-from frappe.utils.data import quoted
-from frappe import _
 from bs4 import BeautifulSoup
+from frappe import _
+from frappe.model.document import Document
+from frappe.utils import cint, cstr
+
+from reflection_telegram import api
+from reflection_telegram.utils import doc_url
 
 
 class TelegramSettings(Document):
-	pass
+	def validate(self):
+		self.telegram_token = cstr(self.telegram_token).strip()
+		self.bot_name = cstr(self.bot_name).strip().lstrip("@")
 
+		# The single most common setup mistake is pasting only the half of the
+		# token after the colon, which Telegram answers with a bare 404.
+		if self.telegram_token and ":" not in self.telegram_token:
+			frappe.throw(
+				_(
+					"That looks like only part of the bot token. BotFather gives you "
+					"<bot id>:<secret>, for example 1234567890:AAG... -- paste the whole thing."
+				)
+			)
 
 
 @frappe.whitelist()
-def send_to_telegram(telegram_user, message, reference_doctype=None, reference_name=None, attachment=None):
+def send_to_telegram(
+	telegram_user, message, reference_doctype=None, reference_name=None, attachment=None
+):
+	"""Send from the "Send To Telegram" menu that this app adds to every form.
 
-	space = "\n" * 2
-	telegram_chat_id = frappe.db.get_value('Telegram User Settings', telegram_user,'telegram_chat_id')
-	telegram_settings = frappe.db.get_value('Telegram User Settings', telegram_user,'telegram_settings')
-	telegram_token = frappe.db.get_value('Telegram Settings', telegram_settings,'telegram_token')
-	bot = telegram.Bot(token=telegram_token)
-
+	Kept as the entry point the desk bundle and Telegram Notification already
+	call, but it now goes through `api.send_message` rather than talking to
+	Telegram itself -- which is what puts these messages in Telegram Message Log,
+	applies the blocked-chat check, and splits anything over 4096 characters
+	instead of letting Telegram reject it.
+	"""
+	message = _plain_text(message)
 
 	if reference_doctype and reference_name:
-		doc_url = get_url_to_form(reference_doctype, reference_name)
-		telegram_doc_link = _("See the document at {0}").format(doc_url)
-		if message:
-			soup = BeautifulSoup(message)
-			message = soup.get_text('\n') + space + str(telegram_doc_link)
-			if type(attachment) is str:
-				attachment = int(attachment)
-			else:
-				if attachment:
-					attachment = 1
-			if attachment == 1:
-				attachment_url =get_url_for_telegram(reference_doctype, reference_name)
-				message = message + space +  attachment_url
-			asyncio.run(bot.send_message(chat_id=telegram_chat_id, text=message))
-		
-	else:
-		message = space + str(message) + space
-		asyncio.run(bot.send_message(chat_id=telegram_chat_id, text=message))
+		link = _("See the document at {0}").format(doc_url(reference_doctype, reference_name))
+		message = f"{message}\n\n{link}" if message else link
 
-
-
-def get_url_for_telegram(doctype, name):
-	doc = frappe.get_doc(doctype, name)
-	return "{url}/api/method/reflection_telegram.get_pdf.pdf?doctype={doctype}&name={name}&key={key}".format(
-		url=frappe.utils.get_url(),
-		doctype=quoted(doctype),
-		name=quoted(name),
-		key=doc.get_signature()
+	return api.send_message(
+		telegram_user=telegram_user,
+		message=message,
+		reference_doctype=reference_doctype,
+		reference_name=reference_name,
+		# The original sent a signed download link as text. Sending the PDF itself
+		# means the recipient does not need the site to be reachable from wherever
+		# they are, and there is no public URL left lying around in a chat.
+		attach_print=cint(attachment) if reference_doctype and reference_name else 0,
 	)
 
 
+def _plain_text(message) -> str:
+	"""Notification templates render HTML; Telegram wants text."""
+	message = cstr(message)
+	if not message:
+		return ""
+
+	return BeautifulSoup(message, "html.parser").get_text("\n").strip()
