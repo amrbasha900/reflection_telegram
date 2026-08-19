@@ -115,10 +115,35 @@ At the default 20 messages/minute, 250 messages go out over about 12 minutes. Tr
 on the **Telegram Broadcast** record — it counts sent and failed, and **Cancel Pending** stops
 anything that has not left yet.
 
-Messages that fail for a transient reason go back in the queue. When Telegram answers `429` it
-also says how long to wait, and the queue honours that exactly, which is what keeps a rate
-limit from escalating into a restriction. Permanent failures — the bot was blocked, the chat
-is gone, the token is wrong — are marked Failed immediately rather than retried.
+### What happens when a message fails
+
+Only **queued** messages are retried. An inline `api.send_message` raises to the caller
+instead — the caller is in a better position to decide than this app is.
+
+The queue splits failures by whether another attempt could plausibly help:
+
+| Failure | Retried? | Why |
+|---|---|---|
+| `429` rate limit | Yes, after exactly the `retry_after` Telegram asked for | Honouring it is what keeps a rate limit from becoming a restriction |
+| Network error, timeout | Yes, backing off 1 minute, then 5 | The network is the likeliest thing to have changed |
+| `403` bot blocked | **No** | Nothing will change until the user unblocks |
+| `400` chat not found | **No** | The chat is gone |
+| Bad or incomplete token | **No** | Every attempt fails identically |
+| Recipient never scanned their QR | **No** | There is no chat to send to |
+
+**Max Attempts Per Message** on Telegram Settings caps the retryable kinds (3 by default:
+the original send, then two retries). After that the row is Failed and stays put.
+
+If a worker dies mid-batch — a restart, a deploy, an out-of-memory kill — the rows it was
+holding are put back in the queue after 15 minutes rather than being stranded in Sending
+forever. At most one message per crash could go out twice, because results are committed
+one at a time; bounded duplication beats a statement that silently never arrives.
+
+**Retrying by hand.** A Failed row has a **Retry** button, the Outbox list view has a bulk
+**Retry** action, and a Broadcast has **Retry Failed** which requeues its failures re-paced
+at the normal rate — dumping 60 recovered messages in at once is how a recovery becomes the
+next rate limit. Manual retries reset the attempt count: the automatic retries gave up for a
+reason, and a person asking again is a new decision.
 
 ## The log, and what "status" can mean
 

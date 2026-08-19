@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import now_datetime
+from frappe.utils import add_to_date, now_datetime
 
 
 class TelegramBroadcast(Document):
@@ -46,6 +46,47 @@ class TelegramBroadcast(Document):
 			values["finished_at"] = now_datetime()
 
 		self.db_set(values, update_modified=False)
+
+	@frappe.whitelist()
+	def retry_failed(self):
+		"""Requeue everything that failed, re-paced.
+
+		Re-spacing matters: dumping 60 recovered messages in at once is how a
+		recovery turns into the rate limit that caused the failures.
+		"""
+		from reflection_telegram.outbox import get_rate
+
+		names = frappe.get_all(
+			"Telegram Outbox",
+			filters={"broadcast": self.name, "status": "Failed"},
+			order_by="creation asc",
+			pluck="name",
+		)
+		if not names:
+			frappe.msgprint(_("Nothing failed in this broadcast."))
+			return 0
+
+		interval = 60.0 / get_rate(self.telegram_settings, self.messages_per_minute)
+		start = now_datetime()
+
+		for index, name in enumerate(names):
+			frappe.db.set_value(
+				"Telegram Outbox",
+				name,
+				{
+					"status": "Queued",
+					"attempts": 0,
+					"error": None,
+					"sending_since": None,
+					"scheduled_at": add_to_date(start, seconds=index * interval),
+				},
+				update_modified=False,
+			)
+
+		self.db_set({"finished_at": None}, update_modified=False)
+		self.refresh_counts()
+		frappe.msgprint(_("Requeued {0} failed messages.").format(len(names)))
+		return len(names)
 
 	@frappe.whitelist()
 	def cancel_pending(self):

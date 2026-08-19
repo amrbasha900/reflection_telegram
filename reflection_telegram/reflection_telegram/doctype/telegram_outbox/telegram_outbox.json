@@ -24,7 +24,8 @@
   "reference_name",
   "column_break_ref",
   "sent_at",
-  "error"
+  "error",
+  "sending_since"
  ],
  "fields": [
   {
@@ -133,12 +134,20 @@
    "fieldtype": "Small Text",
    "label": "Error",
    "read_only": 1
+  },
+  {
+   "description": "Set when the row is handed to Telegram, so a worker that dies mid-batch can be detected.",
+   "fieldname": "sending_since",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Sending Since",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-19 18:08:45.721431",
+ "modified": "2026-08-19 23:40:32.304940",
  "modified_by": "Administrator",
  "module": "Reflection Telegram",
  "name": "Telegram Outbox",

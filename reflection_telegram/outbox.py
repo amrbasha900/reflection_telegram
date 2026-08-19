@@ -22,6 +22,9 @@ DEFAULT_RATE = 20
 BATCH_LOCK = "reflection_telegram_outbox"
 # Backoff between attempts when Telegram did not say how long to wait.
 RETRY_BACKOFF_SECONDS = (60, 300, 900)
+# A batch takes about a minute. Anything still "Sending" well past that means the
+# worker died holding it.
+STUCK_AFTER_MINUTES = 15
 
 
 def get_rate(telegram_settings: str, override: int = 0) -> int:
@@ -85,6 +88,8 @@ def process():
 	"""Scheduler entry point. Runs every minute; overlapping runs skip quietly."""
 	try:
 		with filelock(BATCH_LOCK, timeout=0):
+			reclaim_stuck()
+
 			for settings in _settings_with_due_messages():
 				try:
 					process_settings(settings)
@@ -96,6 +101,40 @@ def process():
 	except LockTimeoutError:
 		# The previous minute's batch is still sending. Nothing to do.
 		return
+
+
+def reclaim_stuck():
+	"""Put rows back in the queue when the worker holding them died.
+
+	`process_settings` flips a whole batch to Sending up front, then commits each
+	result as it goes. So a crash strands rows that were never attempted -- and at
+	most one that was in flight, which is the only row that could go out twice.
+	Bounded duplication beats a statement that silently never arrives.
+	"""
+	cutoff = add_to_date(now_datetime(), minutes=-STUCK_AFTER_MINUTES)
+	stuck = frappe.get_all(
+		"Telegram Outbox",
+		filters={"status": "Sending", "sending_since": ["<", cutoff]},
+		fields=["name", "attempts"],
+	)
+	if not stuck:
+		return
+
+	for row in stuck:
+		frappe.db.set_value(
+			"Telegram Outbox",
+			row.name,
+			{
+				"status": "Queued",
+				"attempts": cint(row.attempts) + 1,
+				"scheduled_at": now_datetime(),
+				"error": _("Requeued: the worker sending this stopped before reporting a result"),
+			},
+			update_modified=False,
+		)
+
+	frappe.db.commit()
+	frappe.logger().info(f"reflection_telegram: requeued {len(stuck)} stuck outbox rows")
 
 
 def _settings_with_due_messages() -> list[str]:
@@ -173,8 +212,7 @@ def process_settings(telegram_settings: str):
 	frappe.db.set_value(
 		"Telegram Outbox",
 		{"name": ["in", [item["row"].name for item in items]]},
-		"status",
-		"Sending",
+		{"status": "Sending", "sending_since": now_datetime()},
 		update_modified=False,
 	)
 	frappe.db.commit()
@@ -212,7 +250,13 @@ def _succeed(row):
 	frappe.db.set_value(
 		"Telegram Outbox",
 		row.name,
-		{"status": "Sent", "sent_at": now_datetime(), "attempts": cint(row.attempts) + 1, "error": None},
+		{
+			"status": "Sent",
+			"sent_at": now_datetime(),
+			"attempts": cint(row.attempts) + 1,
+			"error": None,
+			"sending_since": None,
+		},
 		update_modified=False,
 	)
 
@@ -221,7 +265,12 @@ def _fail(row, message):
 	frappe.db.set_value(
 		"Telegram Outbox",
 		row.name,
-		{"status": "Failed", "error": cstr(message)[:500], "attempts": cint(row.attempts) + 1},
+		{
+			"status": "Failed",
+			"error": cstr(message)[:500],
+			"attempts": cint(row.attempts) + 1,
+			"sending_since": None,
+		},
 		update_modified=False,
 	)
 
@@ -250,6 +299,7 @@ def _handle_error(row, error, max_attempts):
 			"attempts": attempts,
 			"error": cstr(error)[:500],
 			"scheduled_at": add_to_date(now_datetime(), seconds=wait),
+			"sending_since": None,
 		},
 		update_modified=False,
 	)
