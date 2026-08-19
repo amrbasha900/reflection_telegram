@@ -29,16 +29,32 @@ extended with QR onboarding, a rate-limited sending queue, and an API other apps
 
 ## Linking recipients
 
-Open **Telegram QR Codes** (or the workspace shortcut):
+Open **Telegram QR Codes** from the workspace.
 
-1. Pick the Telegram Settings and the party type (Supplier, Customer, Employee, Contact, User).
-2. Select the records you want and press **Generate QR**.
-3. **Print Selected** produces a sheet of QR cards to hand out. **Print One Per Page** gives
-   one card per sheet.
-4. The recipient scans the card, presses **START**, and the chat id is stored automatically.
-   The card turns green on the page.
+**1. Pick who you are printing for.** Supplier, Customer, Employee, Contact or User, each
+shown with how many records it holds.
 
-Tick **Group Chat** before generating to produce links that add the bot to a group instead of
+**2. Find them.** The list is paginated with page numbers — sites here carry thousands of
+suppliers and customers, so nothing is truncated and nothing loads all at once. Search by
+code or name, and filter by **Not linked**, **Linked** or **No QR yet**. Page size is
+12, 24, 48 or 96.
+
+**3. Select.** Click cards to select them, **Select Page** for everything on screen, or
+**Select all N matching** to take the whole filtered set across every page.
+
+**4. Generate.** Up to 25 records are done immediately. Anything larger runs in the
+background with a progress bar, committing as it goes — a failure two thousand records in
+does not throw away the QR codes already built. Records that are already linked are left
+alone: an existing payload that works is never rotated.
+
+**5. Print.** Choose how many cards fit on an A4 page — 2, 4, 6, 8, 9 (default) or 12. Each
+sheet is a fixed-size grid, so the last page looks like the first instead of the cards
+stretching to fill it. Up to 600 cards in one run; beyond that, filter or print page by page.
+
+The recipient scans a card, presses **START**, and the chat id is stored automatically. The
+card turns green in the list.
+
+Tick **Group chat** before generating to produce links that add the bot to a group instead of
 opening a private chat.
 
 ### How the QR works
