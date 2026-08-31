@@ -20,6 +20,12 @@ from frappe.utils import cstr, get_files_path
 MAX_MESSAGE_LENGTH = 4096
 MAX_CAPTION_LENGTH = 1024
 
+# python-telegram-bot became async in v20, which is the API everything here is
+# written against. Older releases are synchronous and lack several error
+# classes, so they fail in ways that read as bugs in this app rather than as a
+# version mismatch. Refuse them by name instead.
+MIN_LIBRARY_VERSION = (21, 0)
+
 
 class TelegramError(frappe.ValidationError):
 	pass
@@ -37,7 +43,45 @@ class TransientError(TelegramError):
 		self.retry_after = retry_after
 
 
+def library_version() -> tuple[int, ...]:
+	raw = getattr(telegram, "__version__", "0")
+	parts = []
+
+	for chunk in cstr(raw).split(".")[:3]:
+		digits = "".join(c for c in chunk if c.isdigit())
+		parts.append(int(digits) if digits else 0)
+
+	return tuple(parts)
+
+
+def ensure_supported_library():
+	"""Fail with the actual problem, not a symptom of it.
+
+	Without this, an old library surfaces as
+	`'Bot' object does not support the asynchronous context manager protocol`,
+	or an AttributeError on an error class that did not exist yet -- neither of
+	which points at the fix.
+	"""
+	current = library_version()
+	if current >= MIN_LIBRARY_VERSION:
+		return
+
+	frappe.throw(
+		_(
+			"This app needs python-telegram-bot {0} or newer, but {1} is installed. "
+			"Run <code>./env/bin/pip install --upgrade 'python-telegram-bot>={0}'</code> "
+			"from the bench directory, then restart."
+		).format(
+			".".join(str(part) for part in MIN_LIBRARY_VERSION),
+			getattr(telegram, "__version__", _("an unknown version")),
+		),
+		PermanentError,
+	)
+
+
 def get_token(telegram_settings: str) -> str:
+	ensure_supported_library()
+
 	token = frappe.db.get_value("Telegram Settings", telegram_settings, "telegram_token")
 	if not token:
 		frappe.throw(
@@ -106,25 +150,31 @@ def resolve_file(file_url: str) -> tuple[str, bytes]:
 		return file_name or os.path.basename(path), f.read()
 
 
+def _error_class(name: str):
+	"""Error classes come and go between library versions; a missing one must not
+	turn error handling into a second, more confusing error."""
+	return getattr(telegram.error, name, ())
+
+
 def classify(exc: Exception) -> TelegramError:
 	"""Map a python-telegram-bot exception onto retry semantics."""
-	if isinstance(exc, telegram.error.RetryAfter):
+	if isinstance(exc, _error_class("RetryAfter")):
 		return TransientError(str(exc), retry_after=int(getattr(exc, "retry_after", 0) or 0))
 
-	if isinstance(exc, telegram.error.TimedOut | telegram.error.NetworkError):
+	if isinstance(exc, (_error_class("TimedOut"), _error_class("NetworkError"))):
 		return TransientError(str(exc))
 
-	if isinstance(exc, telegram.error.InvalidToken):
+	if isinstance(exc, _error_class("InvalidToken")):
 		return PermanentError(
 			_("Telegram rejected the bot token: {0}. Check the token in Telegram Settings.").format(exc)
 		)
 
-	if isinstance(exc, telegram.error.Forbidden):
+	if isinstance(exc, _error_class("Forbidden")):
 		return PermanentError(
 			_("The bot cannot message this chat: {0}. The user may have blocked it or removed it from the group.").format(exc)
 		)
 
-	if isinstance(exc, telegram.error.BadRequest):
+	if isinstance(exc, _error_class("BadRequest")):
 		return PermanentError(str(exc))
 
 	return TransientError(str(exc))
@@ -165,6 +215,8 @@ async def _deliver(bot, chat_id, text, document=None, filename=None, parse_mode=
 
 def send(token: str, chat_id: str, text: str, document=None, filename=None, parse_mode=None) -> list[int]:
 	"""Send a single message. Raises PermanentError or TransientError on failure."""
+	ensure_supported_library()
+
 
 	async def _run():
 		bot = telegram.Bot(token=token)
@@ -185,6 +237,8 @@ def send_many(token: str, items: list[dict], on_result=None, pause: float = 0.0)
 	(item, error, message_ids) after each attempt -- error is None on success --
 	so the caller can record progress as it happens rather than only at the end.
 	"""
+	ensure_supported_library()
+
 
 	async def _run():
 		bot = telegram.Bot(token=token)
@@ -215,6 +269,8 @@ def send_many(token: str, items: list[dict], on_result=None, pause: float = 0.0)
 
 def call_api(token: str, method: str, **kwargs):
 	"""Run one arbitrary Bot API method, e.g. get_me / set_webhook / get_updates."""
+	ensure_supported_library()
+
 
 	async def _run():
 		bot = telegram.Bot(token=token)

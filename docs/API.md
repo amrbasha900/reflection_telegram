@@ -276,6 +276,8 @@ upstream branches on which one it got:
 
 | Message | Cause | Fix |
 |---|---|---|
+| `'Bot' object does not support the asynchronous context manager protocol` | python-telegram-bot older than v20 | `./env/bin/pip install --upgrade 'python-telegram-bot>=21'`, then restart |
+| `module 'telegram.error' has no attribute 'Forbidden'` | Same cause, surfacing while handling another error | Same fix |
 | `The bot token ... is incomplete` | Only the secret half of the token was pasted | Copy the whole `<id>:<secret>` from BotFather |
 | `InvalidToken: Not Found` | Telegram rejected the token | Same as above, or the bot was deleted |
 | `... has no chat id yet` | The QR has not been scanned | Send the recipient their QR card |

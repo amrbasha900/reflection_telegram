@@ -14,6 +14,24 @@ extended with QR onboarding, a rate-limited sending queue, and an API other apps
 | Sending in bulk | One at a time, inline | Queued and paced, so Telegram does not restrict the bot |
 | Calling from another app | Import a doctype module | `reflection_telegram.api` |
 
+## Requirements
+
+`python-telegram-bot >= 21`. The library became async in v20, which is the API this app is
+written against; older releases are synchronous and lack several error classes.
+
+This bites on benches that already had an older copy installed: `pip` treats an unpinned
+requirement as satisfied and never upgrades it, so the app installs cleanly and then fails
+at the first call with something like *'Bot' object does not support the asynchronous
+context manager protocol*. If that happens:
+
+```bash
+cd frappe-bench
+./env/bin/pip install --upgrade 'python-telegram-bot>=21'
+bench restart
+```
+
+The version in use is shown by **Check Bot** on the Telegram Settings record.
+
 ## Setup
 
 1. **Create the bot.** Talk to [@BotFather](https://t.me/BotFather), `/newbot`, and copy the

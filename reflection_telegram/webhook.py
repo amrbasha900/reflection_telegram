@@ -103,6 +103,7 @@ def status(telegram_settings: str) -> dict:
 
 	return {
 		"bot_username": me.username,
+		"library_version": getattr(__import__("telegram"), "__version__", "unknown"),
 		"webhook_url": info.url or "",
 		"pending_update_count": info.pending_update_count,
 		"last_error_message": getattr(info, "last_error_message", None),

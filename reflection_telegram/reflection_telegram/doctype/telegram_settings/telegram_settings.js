@@ -29,6 +29,7 @@ frappe.ui.form.on('Telegram Settings', {
 								<tr><td>${__('Webhook')}</td><td style="word-break:break-all">${frappe.utils.escape_html(s.webhook_url || __('Not registered'))}</td></tr>
 								<tr><td>${__('Pending Updates')}</td><td>${s.pending_update_count || 0}</td></tr>
 								<tr><td>${__('Last Error')}</td><td>${frappe.utils.escape_html(s.last_error_message || '-')}</td></tr>
+								<tr><td>${__('Library')}</td><td>python-telegram-bot ${frappe.utils.escape_html(s.library_version || '?')}</td></tr>
 							</table>`,
 					});
 					frm.reload_doc();
