@@ -328,3 +328,46 @@ class TestPublicApiPermissions(StrictTestCase):
 		result = api.send_message(telegram_user=self.recipient, message="hello")
 		self.assertEqual(result["status"], "Sent")
 		self.assertEqual(len(self.sends), 1)
+
+
+class TestDispatchGuards(StrictTestCase):
+	def guarded(self, refuse):
+		get_hooks, get_attr = frappe.get_hooks, frappe.get_attr
+		calls = []
+
+		def guard(**kw):
+			calls.append(kw)
+			if refuse():
+				error = frappe.PermissionError("access revoked")
+				error.code = "role_revoked"
+				raise error
+
+		self.enterContext(patch.object(frappe, "get_hooks", side_effect=lambda hook=None, *a, **k: ["rt.guard"] if hook == strict.GUARD_HOOK else get_hooks(hook, *a, **k)))
+		self.enterContext(patch.object(frappe, "get_attr", side_effect=lambda path: guard if path == "rt.guard" else get_attr(path)))
+		return calls
+
+	def test_a_refused_send_is_failed_unsent_and_never_retried(self):
+		refuse = [True]
+		calls = self.guarded(lambda: refuse[0])
+		queued = self.queue("rdc:test:guard")
+		self.run_worker()
+		row = self.row(queued["outbox"])
+		self.assertEqual((row.status, row.error_code, row.attempt_started_at), ("Failed", "REVOKED_ROLE_REVOKED", None))
+		self.assertEqual(self.sends, [])
+		self.assertEqual(calls[0]["reference_name"], self.note.name)
+		refuse[0] = False
+		self.run_worker()
+		self.assertEqual(self.sends, [], "a refusal is final: nothing picks it up again")
+
+	def test_a_review_resend_is_guarded_again(self):
+		refuse = [False]
+		self.guarded(lambda: refuse[0])
+		queued = self.queue("rdc:test:guard-review")
+		self.answer = telegram_client.TransientError("Timed out")
+		self.run_worker()
+		self.answer = None
+		refuse[0] = True
+		strict.resolve_review("rdc:test:guard-review", "resend", "customer says nothing arrived", confirm_duplicate_risk=1)
+		self.run_worker()
+		self.assertEqual(len(self.sends), 1, "only the first, uncertain attempt")
+		self.assertEqual(self.row(queued["outbox"]).error_code, "REVOKED_ROLE_REVOKED")
