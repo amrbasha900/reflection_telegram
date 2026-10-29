@@ -25,6 +25,49 @@ A recipient is identified either by its **Telegram User Settings** name (`telegr
 the business record it belongs to (`party_type` + `party`). Use whichever the calling code
 already has.
 
+**Permissions (v2.1.0).** Every whitelisted function checks the *calling* user:
+
+| Call | Requires |
+|---|---|
+| a `reference_doctype` / `reference_name` | read on that document (and print when `attach_print`) |
+| a `file_url` | the File record exists and the user can read it (private files: its owner or readers of the document it is attached to) |
+| neither | read on the recipient's Telegram User Settings |
+| `send_bulk` | create on Telegram Broadcast (or Telegram Outbox with `create_broadcast=0`), plus the checks above per message |
+| `send_to_party`, `resolve_party`, `ensure_link` | read on the party record |
+| `get_status` | read on the Telegram User Settings record |
+
+Server code configured by an administrator (Telegram Notification) calls `api.deliver`, which skips
+those checks and is not whitelisted. The chat-link fields of Telegram User Settings (chat id, link
+status) are set only by the linking flow or a System Manager.
+
+## Strict delivery (`reflection_telegram.strict`, server-side only)
+
+For one private PDF per person where a duplicate matters (Report Distribution Center in Al-Dallala).
+Not whitelisted; the calling app authorises its user first.
+
+| Function | Purpose |
+|---|---|
+| `enqueue(idempotency_key, telegram_user, file, file_sha256, reference_doctype, reference_name, external_reference=None, caption=None, file_name=None)` | Queue; idempotent per key (`created: false` on replay, `IDEMPOTENCY_CONFLICT` for a different message) |
+| `status(keys)` | Rows by key: status, error code, message ids, review fields |
+| `cancel(keys, reason)` | Cancel rows still Queued |
+| `resolve_review(key, action, reason, confirm_duplicate_risk=0, user=None)` | `confirm_sent`, `confirm_unsent`, `resend` (duplicate risk acknowledged); audited |
+
+Rules: private chats only (not a group, positive chat id, not blocked); the File must be private,
+attached to the reference document, and match its SHA-256 when queued and again when sent; one
+guarded claim per row; the attempt marker is committed before Telegram is called. Telegram's answer
+decides: message id → **Sent** (accepted — Telegram gives no delivery or read receipt); 429 → back in
+the queue after `retry_after`, attempt not counted; a refusal (BadRequest, Forbidden, bad token) →
+**Failed**; timeout, lost connection or anything unexpected → **Needs Review**, never resent
+automatically. A worker that died before the marker leaves the row requeued, after it Needs Review.
+Strict rows share the bot's per-minute rate with the legacy queue (legacy first).
+
+Outcome hook, for apps that mirror the state: `telegram_strict_delivery_listeners = ["app.module.fn"]`
+in the app's `hooks.py`; called after commit with `outbox`, `idempotency_key`, `external_reference`,
+`status`.
+
+`BadRequest` is now classified as a permanent failure for every caller (python-telegram-bot makes it
+a subclass of `NetworkError`, so it used to be retried).
+
 ---
 
 ## send_message

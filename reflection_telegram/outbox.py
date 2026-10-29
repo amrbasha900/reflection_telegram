@@ -8,6 +8,10 @@ once-a-minute job drains whatever has come due, pausing between sends.
 Pacing happens twice on purpose. Spreading `scheduled_at` at enqueue time caps
 the long-run rate no matter how many jobs run, and the in-batch pause keeps a
 single minute's worth from leaving as one burst.
+
+Rows with delivery_policy = Strict (Report Distribution Center) share this queue,
+this lock and each bot's per-minute rate, but are claimed, sent and recovered by
+`reflection_telegram.strict`: the legacy functions below never touch them.
 """
 
 import frappe
@@ -16,7 +20,10 @@ from frappe.utils import add_to_date, cint, cstr, now_datetime
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
-from reflection_telegram import message_log, telegram_client
+from reflection_telegram import message_log, strict, telegram_client
+
+#: Legacy rows only: strict rows have their own claim, recovery and review.
+LEGACY = ["!=", strict.STRICT]
 
 DEFAULT_RATE = 20
 BATCH_LOCK = "reflection_telegram_outbox"
@@ -89,10 +96,13 @@ def process():
 	try:
 		with filelock(BATCH_LOCK, timeout=0):
 			reclaim_stuck()
+			strict.reclaim_stuck()
 
 			for settings in _settings_with_due_messages():
 				try:
-					process_settings(settings)
+					sent = process_settings(settings)
+					# Strict rows get what is left of this bot's per-minute rate.
+					strict.process_settings(settings, budget=get_rate(settings) - cint(sent))
 				except Exception:
 					frappe.log_error(
 						title=f"Telegram outbox failed for {settings}",
@@ -114,7 +124,7 @@ def reclaim_stuck():
 	cutoff = add_to_date(now_datetime(), minutes=-STUCK_AFTER_MINUTES)
 	stuck = frappe.get_all(
 		"Telegram Outbox",
-		filters={"status": "Sending", "sending_since": ["<", cutoff]},
+		filters={"status": "Sending", "sending_since": ["<", cutoff], "delivery_policy": LEGACY},
 		fields=["name", "attempts"],
 	)
 	if not stuck:
@@ -154,13 +164,14 @@ def process_settings(telegram_settings: str):
 			"status": "Queued",
 			"telegram_settings": telegram_settings,
 			"scheduled_at": ["<=", now_datetime()],
+			"delivery_policy": LEGACY,
 		},
 		fields=["name", "telegram_user", "message", "file_url", "parse_mode", "broadcast", "attempts"],
 		order_by="scheduled_at asc",
 		limit=rate,
 	)
 	if not rows:
-		return
+		return 0
 
 	skip_blocked = cint(
 		frappe.db.get_value("Telegram Settings", telegram_settings, "auto_disable_blocked")
@@ -207,7 +218,7 @@ def process_settings(telegram_settings: str):
 
 	if not items:
 		frappe.db.commit()
-		return
+		return len(rows)
 
 	frappe.db.set_value(
 		"Telegram Outbox",
@@ -244,6 +255,7 @@ def process_settings(telegram_settings: str):
 	telegram_client.send_many(token, items, on_result=record, pause=60.0 / rate)
 
 	_refresh_broadcasts({row.broadcast for row in rows if row.broadcast})
+	return len(rows)
 
 
 def _succeed(row):

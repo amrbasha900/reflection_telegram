@@ -13,6 +13,14 @@ the same functions work from Python (`frappe.call` / a direct import) and over
 Single sends go out immediately by default; anything bulk is queued and paced by
 `reflection_telegram.outbox`. Pass `queue=1` to a single send when the caller is
 in a request and should not wait on the network.
+
+Every whitelisted function checks the calling user's own permissions (v2.1.0):
+the referenced document must be readable (and printable when its PDF is
+attached), an attached file must be readable through its File record, and a
+message with neither needs read access to the recipient's Telegram User
+Settings. Server code configured by an administrator (Telegram Notification)
+uses `deliver`, which skips those checks. Report Distribution messages use
+`reflection_telegram.strict`, never these functions.
 """
 
 import json
@@ -23,6 +31,45 @@ from frappe.utils import cint, cstr
 
 from reflection_telegram import message_log, onboarding, outbox, telegram_client
 from reflection_telegram.utils import render_pdf
+
+
+def check_send_permission(
+	telegram_user: str,
+	file_url: str = None,
+	reference_doctype: str = None,
+	reference_name: str = None,
+	attach_print: int = 0,
+):
+	"""Refuse what the calling user could not see or print themselves."""
+	if not telegram_user or not frappe.db.exists("Telegram User Settings", telegram_user):
+		frappe.throw(
+			_("Telegram User Settings {0} not found").format(telegram_user), frappe.DoesNotExistError
+		)
+
+	if reference_doctype and reference_name:
+		if not frappe.has_permission(reference_doctype, "read", doc=reference_name):
+			frappe.throw(
+				_("Not permitted to read {0} {1}").format(_(reference_doctype), reference_name),
+				frappe.PermissionError,
+			)
+		if cint(attach_print) and not frappe.has_permission(reference_doctype, "print", doc=reference_name):
+			frappe.throw(
+				_("Not permitted to print {0} {1}").format(_(reference_doctype), reference_name),
+				frappe.PermissionError,
+			)
+
+	if file_url:
+		file_name = frappe.db.get_value("File", {"file_url": cstr(file_url).split("?")[0]}, "name")
+		if not file_name:
+			frappe.throw(_("Attachment {0} is not a known file").format(file_url), frappe.DoesNotExistError)
+		if not frappe.has_permission("File", "read", doc=file_name):
+			frappe.throw(_("Not permitted to send {0}").format(file_url), frappe.PermissionError)
+
+	if not (reference_doctype and reference_name) and not file_url:
+		if not frappe.has_permission("Telegram User Settings", "read", doc=telegram_user):
+			frappe.throw(
+				_("Not permitted to message {0}").format(telegram_user), frappe.PermissionError
+			)
 
 
 @frappe.whitelist()
@@ -37,7 +84,36 @@ def send_message(
 	print_format: str = None,
 	queue: int = 0,
 ) -> dict:
-	"""Send one message to one linked Telegram user.
+	"""Send one message to one linked Telegram user, as the calling user (permissions checked).
+
+	See `deliver` for the arguments and the return value.
+	"""
+	check_send_permission(telegram_user, file_url, reference_doctype, reference_name, attach_print)
+	return deliver(
+		telegram_user=telegram_user,
+		message=message,
+		file_url=file_url,
+		parse_mode=parse_mode,
+		reference_doctype=reference_doctype,
+		reference_name=reference_name,
+		attach_print=attach_print,
+		print_format=print_format,
+		queue=queue,
+	)
+
+
+def deliver(
+	telegram_user: str,
+	message: str = None,
+	file_url: str = None,
+	parse_mode: str = None,
+	reference_doctype: str = None,
+	reference_name: str = None,
+	attach_print: int = 0,
+	print_format: str = None,
+	queue: int = 0,
+) -> dict:
+	"""Send one message to one linked Telegram user. Trusted server code only: no permission check.
 
 	Args:
 		telegram_user: name of a Telegram User Settings record.
@@ -125,7 +201,9 @@ def send_to_party(
 	Most callers know they want to message supplier `2012381`, not which linking
 	record that maps to.
 	"""
-	telegram_user = resolve_party(party_type, party, telegram_settings)
+	if not frappe.has_permission(party_type, "read", doc=party):
+		frappe.throw(_("Not permitted to read {0} {1}").format(_(party_type), party), frappe.PermissionError)
+	telegram_user = _linked_record(party_type, party, telegram_settings)
 	if not telegram_user:
 		frappe.throw(
 			_("{0} {1} is not linked to Telegram yet").format(party_type, party),
@@ -164,6 +242,14 @@ def send_bulk(
 	messages = _as_list(messages)
 	if not messages:
 		return {"broadcast": None, "queued": 0, "skipped": 0}
+
+	# Bulk sending is an administrator's tool, and every message is still checked on its own.
+	if not frappe.has_permission("Telegram Broadcast" if cint(create_broadcast) else "Telegram Outbox", "create"):
+		frappe.throw(_("Not permitted to send Telegram messages in bulk"), frappe.PermissionError)
+	for m in messages:
+		check_send_permission(
+			m.get("telegram_user"), m.get("file_url"), m.get("reference_doctype"), m.get("reference_name")
+		)
 
 	unlinked = [m["telegram_user"] for m in messages if not _chat_id(m["telegram_user"])]
 	if unlinked:
@@ -214,6 +300,12 @@ def send_bulk(
 @frappe.whitelist()
 def resolve_party(party_type: str, party: str, telegram_settings: str = None) -> str | None:
 	"""Find the Telegram User Settings record for a business record, if linked."""
+	if not frappe.has_permission(party_type, "read", doc=party):
+		frappe.throw(_("Not permitted to read {0} {1}").format(_(party_type), party), frappe.PermissionError)
+	return _linked_record(party_type, party, telegram_settings)
+
+
+def _linked_record(party_type: str, party: str, telegram_settings: str = None) -> str | None:
 	filters = {"party": party_type, "telegram_user": party, "telegram_chat_id": ["is", "set"]}
 	if telegram_settings:
 		filters["telegram_settings"] = telegram_settings
@@ -225,6 +317,11 @@ def resolve_party(party_type: str, party: str, telegram_settings: str = None) ->
 def get_status(telegram_user: str) -> dict:
 	"""Whether a recipient is ready to receive, and the QR link if not."""
 	doc = frappe.get_doc("Telegram User Settings", telegram_user)
+	doc.check_permission("read")
+	return _status(doc)
+
+
+def _status(doc) -> dict:
 	return {
 		"telegram_user": doc.name,
 		"party_type": doc.party,
@@ -244,6 +341,8 @@ def ensure_link(party_type: str, party: str, telegram_settings: str, is_group_ch
 	Idempotent: calling it for an already-linked party returns the existing
 	record untouched rather than rotating a working payload.
 	"""
+	if not frappe.has_permission(party_type, "read", doc=party):
+		frappe.throw(_("Not permitted to read {0} {1}").format(_(party_type), party), frappe.PermissionError)
 	name = frappe.db.get_value(
 		"Telegram User Settings",
 		{"party": party_type, "telegram_user": party, "telegram_settings": telegram_settings},
@@ -254,6 +353,7 @@ def ensure_link(party_type: str, party: str, telegram_settings: str, is_group_ch
 		doc = frappe.get_doc("Telegram User Settings", name)
 		if not doc.qr_code or not doc.deep_link:
 			onboarding.refresh(doc)
+			doc.flags.linking = True
 			doc.save(ignore_permissions=True)
 	else:
 		doc = frappe.get_doc(
@@ -266,7 +366,7 @@ def ensure_link(party_type: str, party: str, telegram_settings: str, is_group_ch
 			}
 		).insert(ignore_permissions=True)
 
-	return get_status(doc.name)
+	return _status(doc)
 
 
 def _resolve_target(telegram_user: str) -> tuple[str, str]:
