@@ -61,6 +61,11 @@ the queue after `retry_after`, attempt not counted; a refusal (BadRequest, Forbi
 automatically. A worker that died before the marker leaves the row requeued, after it Needs Review.
 Strict rows share the bot's per-minute rate with the legacy queue (legacy first).
 
+Dispatch guard (v2.1.1), for apps that must authorise each send at the last moment:
+`telegram_strict_dispatch_guards = ["app.module.fn"]`, called with `outbox`, `reference_doctype`, `reference_name`,
+`external_reference` immediately before the attempt marker on every attempt (first send, review resend, retry). A guard
+that raises fails the row unsent and final (`REVOKED_<code>`); it is never retried automatically.
+
 Outcome hook, for apps that mirror the state: `telegram_strict_delivery_listeners = ["app.module.fn"]`
 in the app's `hooks.py`; called after commit with `outbox`, `idempotency_key`, `external_reference`,
 `status`.

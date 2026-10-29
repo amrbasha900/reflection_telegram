@@ -26,6 +26,14 @@ the legacy queue in what happens when the outcome is not known:
 Telegram's message id means Telegram accepted the message. The Bot API gives no
 delivery or read receipt, so none is recorded.
 
+Apps that queue strict messages may also authorise each send at the last moment::
+
+    telegram_strict_dispatch_guards = ["my_app.module.authorize_telegram_send"]
+
+called with ``outbox``, ``reference_doctype``, ``reference_name`` and ``external_reference`` immediately
+before the attempt marker, on every attempt (first send, a resend after review, a retry). A guard that raises
+stops the send: the row is Failed (``REVOKED_<code>``), provably unsent, never retried automatically.
+
 Apps that want to hear about outcomes register a hook::
 
     telegram_strict_delivery_listeners = ["my_app.module.on_telegram_outcome"]
@@ -52,6 +60,7 @@ STRICT = "Strict"
 MAX_DOCUMENT_BYTES = 50 * 1024**2
 MAX_KEY_LENGTH = 140
 LISTENER_HOOK = "telegram_strict_delivery_listeners"
+GUARD_HOOK = "telegram_strict_dispatch_guards"
 #: A strict row left "Sending" this long belongs to a worker that died.
 STUCK_AFTER_MINUTES = 15
 #: Wait after a 429 that did not say how long.
@@ -315,6 +324,7 @@ def _attempt(name: str, token: str) -> str:
 			raise StrictDeliveryError("BOT_CHANGED", _("The recipient is now linked to another bot"))
 		filename, content = verify_file(row.file, row.file_sha256, row.reference_doctype, row.reference_name)
 		bot_token = telegram_client.get_token(settings)
+		_run_guards(row)
 	except (StrictDeliveryError, telegram_client.TelegramError) as e:
 		# Nothing left the server: a final, recorded refusal.
 		_finish(name, token, "Failed", getattr(e, "code", "NOT_SENDABLE"), str(e))
@@ -385,6 +395,21 @@ def _attempt(name: str, token: str) -> str:
 	frappe.db.commit()
 	_notify(name)
 	return status
+
+
+def _run_guards(row) -> None:
+	"""The queuing app's last word before the attempt marker; any refusal (or error deciding) stops the send."""
+	import re
+
+	for path in frappe.get_hooks(GUARD_HOOK) or []:
+		try:
+			frappe.get_attr(path)(
+				outbox=row.name, reference_doctype=row.reference_doctype, reference_name=row.reference_name,
+				external_reference=row.external_reference,
+			)  # fmt: skip
+		except Exception as e:
+			code = re.sub(r"[^A-Z0-9_]", "", str(getattr(e, "code", "") or "NOT_AUTHORISED").upper())[:60] or "NOT_AUTHORISED"
+			raise StrictDeliveryError(f"REVOKED_{code}", (str(e) or _("The send is no longer authorised"))[:450]) from None
 
 
 def reclaim_stuck() -> dict:
