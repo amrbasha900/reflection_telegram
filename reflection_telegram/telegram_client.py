@@ -14,7 +14,7 @@ import os
 import frappe
 import telegram
 from frappe import _
-from frappe.utils import cstr, get_files_path
+from frappe.utils import cstr
 
 # https://core.telegram.org/bots/api#sendmessage
 MAX_MESSAGE_LENGTH = 4096
@@ -28,19 +28,26 @@ MIN_LIBRARY_VERSION = (21, 0)
 
 
 class TelegramError(frappe.ValidationError):
-	pass
+	#: What is known about the message after this error, for strict delivery:
+	#: "rejected" - Telegram answered and refused it (not sent);
+	#: "rate_limited" - Telegram answered 429 (not sent, wait retry_after);
+	#: "unknown" - no answer (timeout, network): Telegram may have accepted it.
+	kind = "unknown"
 
 
 class PermanentError(TelegramError):
 	"""Retrying will not help: bad token, blocked bot, unknown chat."""
 
+	kind = "rejected"
+
 
 class TransientError(TelegramError):
 	"""Worth another attempt: network blips and rate limits."""
 
-	def __init__(self, message, retry_after=0):
+	def __init__(self, message, retry_after=0, kind="unknown"):
 		super().__init__(message)
 		self.retry_after = retry_after
+		self.kind = kind
 
 
 def library_version() -> tuple[int, ...]:
@@ -131,23 +138,29 @@ def split_message(text: str, limit: int = MAX_MESSAGE_LENGTH) -> list[str]:
 
 
 def resolve_file(file_url: str) -> tuple[str, bytes]:
-	"""Read a Frappe file URL off disk and return (filename, contents)."""
-	file_url = cstr(file_url)
+	"""Read a Frappe file URL and return (filename, contents).
+
+	Only a URL that a File record holds is read, through that record: a bare path
+	(or a URL that merely shares a basename with a real file) is refused. Whether
+	the caller may send that file is decided by the public API before it is queued.
+	"""
+	file_url = cstr(file_url).split("?")[0]
 	if not file_url:
 		return None, None
 
-	file_name = frappe.db.get_value("File", {"file_url": file_url}, "file_name")
-	is_private = file_url.startswith("/private/")
-	path = os.path.join(
-		get_files_path(is_private=1 if is_private else 0),
-		os.path.basename(file_url.split("?")[0]),
-	)
+	file_name = frappe.db.get_value("File", {"file_url": file_url}, "name")
+	if not file_name:
+		frappe.throw(_("Attachment {0} is not a known file").format(file_url), PermanentError)
 
-	if not os.path.exists(path):
+	file_doc = frappe.get_doc("File", file_name)
+	try:
+		content = file_doc.get_content()
+	except Exception:
 		frappe.throw(_("Attachment {0} was not found on disk").format(file_url), PermanentError)
 
-	with open(path, "rb") as f:
-		return file_name or os.path.basename(path), f.read()
+	if isinstance(content, str):
+		content = content.encode()
+	return file_doc.file_name or os.path.basename(file_url), content
 
 
 def _error_class(name: str):
@@ -159,7 +172,14 @@ def _error_class(name: str):
 def classify(exc: Exception) -> TelegramError:
 	"""Map a python-telegram-bot exception onto retry semantics."""
 	if isinstance(exc, _error_class("RetryAfter")):
-		return TransientError(str(exc), retry_after=int(getattr(exc, "retry_after", 0) or 0))
+		return TransientError(
+			str(exc), retry_after=int(getattr(exc, "retry_after", 0) or 0), kind="rate_limited"
+		)
+
+	# BadRequest subclasses NetworkError in python-telegram-bot, so it must be
+	# matched first: it is Telegram's answer refusing the request, not a lost one.
+	if isinstance(exc, _error_class("BadRequest")):
+		return PermanentError(str(exc))
 
 	if isinstance(exc, (_error_class("TimedOut"), _error_class("NetworkError"))):
 		return TransientError(str(exc))
@@ -173,9 +193,6 @@ def classify(exc: Exception) -> TelegramError:
 		return PermanentError(
 			_("The bot cannot message this chat: {0}. The user may have blocked it or removed it from the group.").format(exc)
 		)
-
-	if isinstance(exc, _error_class("BadRequest")):
-		return PermanentError(str(exc))
 
 	return TransientError(str(exc))
 

@@ -1,7 +1,7 @@
 frappe.listview_settings['Telegram Outbox'] = {
 	add_fields: ['status', 'attempts'],
 	get_indicator: function (doc) {
-		const map = { Sent: 'green', Failed: 'red', Queued: 'orange', Sending: 'blue', Cancelled: 'gray' };
+		const map = { Sent: 'green', Failed: 'red', Queued: 'orange', Sending: 'blue', Cancelled: 'gray', 'Needs Review': 'purple' };
 		return [__(doc.status), map[doc.status] || 'gray', 'status,=,' + doc.status];
 	},
 	onload: function (listview) {

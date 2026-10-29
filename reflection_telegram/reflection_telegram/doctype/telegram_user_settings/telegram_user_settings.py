@@ -10,7 +10,23 @@ from frappe.model.document import Document
 from reflection_telegram import onboarding, telegram_client, webhook
 
 
+#: Set only by the linking flow (webhook, check_link) and the Telegram status
+#: updates, never typed: a changed chat id silently redirects a party's messages.
+LINK_FIELDS = ("telegram_chat_id", "linked_on", "linked_chat_title", "chat_status", "status_changed_on", "telegram_token")
+
+
 class TelegramUserSettings(Document):
+	def validate(self):
+		# flags.linking: set by this app's own linking code (api.ensure_link), never by a request.
+		if self.is_new() or self.flags.linking or "System Manager" in frappe.get_roles():
+			return
+		changed = [f for f in LINK_FIELDS if self.has_value_changed(f)]
+		if changed:
+			frappe.throw(
+				_("Only the Telegram linking flow can change {0}").format(", ".join(changed)),
+				frappe.PermissionError,
+			)
+
 	def before_insert(self):
 		# The QR image is attached in after_insert -- it needs self.name to exist.
 		onboarding.assign_link(self)
@@ -38,6 +54,7 @@ class TelegramUserSettings(Document):
 		Deliberately destructive: this is the "someone else has my QR code" button,
 		so the old payload must stop working.
 		"""
+		self.check_permission("write")
 		onboarding.refresh(self, force=True)
 		self.db_set(
 			{
@@ -59,6 +76,7 @@ class TelegramUserSettings(Document):
 		The webhook normally records the link on its own; this is the manual pull
 		for sites polling instead, or for checking without waiting for the tick.
 		"""
+		self.check_permission("write")
 		if self.telegram_chat_id:
 			return {"linked": True, "chat_id": self.telegram_chat_id}
 

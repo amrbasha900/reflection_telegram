@@ -19,7 +19,7 @@ from frappe.utils.jinja import validate_template
 from frappe.modules.utils import export_module_json, get_doc_module
 from six import string_types
 from reflection_telegram.reflection_telegram.doctype.telegram_settings.telegram_settings import (
-	send_to_telegram,
+	deliver_to_telegram,
 )
 
 
@@ -208,12 +208,15 @@ def get_context(context):
 		attachment = self.get_attachment(doc)
 		for telegram_user in recipients_telegram_user_list:
 			try:
-				send_to_telegram(
+				# A notification is configured by an administrator and runs on the
+				# document's own save, so it is sent as trusted server code.
+				deliver_to_telegram(
 					telegram_user=telegram_user,
 					message=message,
 					reference_doctype=doc.doctype,
 					reference_name=doc.name,
 					attachment=attachment,
+					trusted=True,
 				)
 			except Exception:
 				# These notifications run from doc_events on every doctype, so an

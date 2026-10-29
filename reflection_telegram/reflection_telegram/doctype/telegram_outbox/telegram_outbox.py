@@ -33,6 +33,11 @@ class TelegramOutbox(Document):
 		Attempts reset to zero: automatic retries gave up for a reason, and a
 		person asking again is a new decision, not a continuation of that one.
 		"""
+		self.check_permission("write")
+		if self.delivery_policy == "Strict":
+			# Strict messages belong to the system that queued them (its own retry and
+			# review, with the duplicate-risk decision recorded there).
+			frappe.throw(_("Strict delivery messages are retried or reviewed from the system that queued them."))
 		if self.status not in RETRYABLE_STATUSES:
 			frappe.throw(_("Only failed or cancelled messages can be retried."))
 

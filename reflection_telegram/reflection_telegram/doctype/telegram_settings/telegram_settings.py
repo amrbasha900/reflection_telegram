@@ -40,14 +40,27 @@ def send_to_telegram(
 	Telegram itself -- which is what puts these messages in Telegram Message Log,
 	applies the blocked-chat check, and splits anything over 4096 characters
 	instead of letting Telegram reject it.
+
+	The calling user's permissions are checked (`api.send_message`).
 	"""
+	return deliver_to_telegram(
+		telegram_user, message, reference_doctype, reference_name, attachment, trusted=False
+	)
+
+
+def deliver_to_telegram(
+	telegram_user, message, reference_doctype=None, reference_name=None, attachment=None, trusted=False
+):
+	"""`trusted` skips the calling user's permission checks: only for server code an
+	administrator configured (Telegram Notification), never for a request."""
+	send = api.deliver if trusted else api.send_message
 	message = _plain_text(message)
 
 	if reference_doctype and reference_name:
 		link = _("See the document at {0}").format(doc_url(reference_doctype, reference_name))
 		message = f"{message}\n\n{link}" if message else link
 
-	return api.send_message(
+	return send(
 		telegram_user=telegram_user,
 		message=message,
 		reference_doctype=reference_doctype,
